@@ -1,7 +1,8 @@
 'use strict';
 
 const API = 'http://127.0.0.1:1234/v1/chat/completions';
-const DEFAULT_PROMPT = 'You are a writing assistant. Your task is to rewrite the following text to prioritize simplicity, clarity and brevity. Your reply MUST contain ONLY the rewritten text, nothing else.';
+const DEFAULT_PROMPT1 = 'You are a writing coach. Your task is to rewrite the following text to prioritize simplicity, clarity and brevity. Your reply MUST contain ONLY the rewritten text, nothing else.';
+const DEFAULT_PROMPT2 = 'You are a writing coach. Your task is to rewrite just the selected sentence for professionalism, conciseness and focus on impact.';
 const DEBOUNCE = 400;
 const STORE = 'wa';
 
@@ -37,7 +38,7 @@ function load() {
       return;
     }
   } catch {}
-  tiles = [{ id: nextId++, prompt: DEFAULT_PROMPT }];
+  tiles = [{ id: nextId++, prompt: DEFAULT_PROMPT1 }, { id: nextId++, prompt: DEFAULT_PROMPT2 }];
   persist();
 }
 

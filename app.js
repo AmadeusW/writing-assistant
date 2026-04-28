@@ -163,7 +163,6 @@ async function runLoop(v) {
     currentAbort = new AbortController();
     const out = outputEl(id);
     const el = tileEl(id);
-    if (out) out.textContent = '';
     if (el) el.classList.add('streaming');
 
     try {

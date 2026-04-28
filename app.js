@@ -298,7 +298,7 @@ function computeEmphasis(text, pos, scope) {
   while (start < end && /\s/.test(text[start])) start++;
   while (end > start && /\s/.test(text[end - 1])) end--;
   if (start >= end) return full;
-  const userText = text.slice(0, start) + '**' + text.slice(start, end) + '**' + text.slice(end);
+  const userText = text.slice(0, start) + ' [SELECTED] ' + text.slice(start, end) + ' [/SELECTED] ' + text.slice(end);
   return { userText, start, end };
 }
 

@@ -9,12 +9,14 @@ const STORE = 'wa';
 let tiles = [];   // [{id, prompt}]
 let nextId = 1;
 let mainText = '';
+let caretPos = 0;
 
 // --- Request orchestration ---
 let loopVer = 0;
 let currentAbort = null;
 let processingId = null;
 let queue = [];
+const lastUserText = new Map(); // tile id → last userText sent
 
 // --- Debounce timers ---
 let mainTimer = null;
@@ -113,6 +115,7 @@ function delTile(id) {
   persist();
   clearTimeout(tileTimers.get(id));
   tileTimers.delete(id);
+  lastUserText.delete(id);
   queue = queue.filter(q => q !== id);
   const wasProcessing = processingId === id;
   tileEl(id)?.remove();
@@ -144,10 +147,15 @@ function enqueue(id) {
 }
 
 async function runLoop(v) {
+  const snapCaret = caretPos;
   while (queue.length > 0 && v === loopVer) {
     const id = queue.shift();
     const tile = tiles.find(t => t.id === id);
     if (!tile || !tile.prompt.trim() || !mainText.trim()) continue;
+
+    const userText = emphasizeText(mainText, snapCaret, detectScope(tile.prompt));
+    if (userText === lastUserText.get(id)) continue;
+    lastUserText.set(id, userText);
 
     processingId = id;
     currentAbort = new AbortController();
@@ -157,7 +165,7 @@ async function runLoop(v) {
     if (el) el.classList.add('streaming');
 
     try {
-      await doStream(tile.prompt, mainText, out, currentAbort.signal);
+      await doStream(tile.prompt, userText, out, currentAbort.signal);
     } catch (e) {
       if (e.name === 'AbortError') {
         if (el) el.classList.remove('streaming');
@@ -214,6 +222,65 @@ async function doStream(sys, user, out, signal) {
   }
 }
 
+// --- Caret-based emphasis ---
+
+function detectScope(prompt) {
+  if (/\bparagraph\b/i.test(prompt)) return 'paragraph';
+  if (/\bsentence\b/i.test(prompt)) return 'sentence';
+  if (/\bword\b/i.test(prompt)) return 'word';
+  return 'text';
+}
+
+function getWordBounds(text, pos) {
+  let start = pos, end = pos;
+  while (start > 0 && !/\s/.test(text[start - 1])) start--;
+  while (end < text.length && !/\s/.test(text[end])) end++;
+  return { start, end };
+}
+
+function getSentenceBounds(text, pos) {
+  let start = 0;
+  for (let i = pos - 1; i >= 0; i--) {
+    if (text[i] === '\n') { start = i + 1; break; }
+    if (/[.!?]/.test(text[i]) && (i + 1 >= text.length || /\s/.test(text[i + 1]))) {
+      start = i + 1;
+      while (start < text.length && /[ \t]/.test(text[start])) start++;
+      break;
+    }
+  }
+  let end = text.length;
+  for (let i = pos; i < text.length; i++) {
+    if (text[i] === '\n') { end = i; break; }
+    if (/[.!?]/.test(text[i])) { end = i + 1; break; }
+  }
+  return { start, end };
+}
+
+function getParagraphBounds(text, pos) {
+  const sep = '\n\n';
+  let start = 0;
+  const prev = text.lastIndexOf(sep, pos > 0 ? pos - 1 : 0);
+  if (prev !== -1) start = prev + sep.length;
+  let end = text.length;
+  const next = text.indexOf(sep, pos);
+  if (next !== -1) end = next;
+  return { start, end };
+}
+
+function emphasizeText(text, pos, scope) {
+  if (scope === 'text' || !text.trim()) return text;
+  let bounds;
+  if (scope === 'word') bounds = getWordBounds(text, pos);
+  else if (scope === 'sentence') bounds = getSentenceBounds(text, pos);
+  else if (scope === 'paragraph') bounds = getParagraphBounds(text, pos);
+  if (!bounds) return text;
+  let { start, end } = bounds;
+  while (start < end && /\s/.test(text[start])) start++;
+  while (end > start && /\s/.test(text[end - 1])) end--;
+  if (start >= end) return text;
+  return text.slice(0, start) + '**' + text.slice(start, end) + '**' + text.slice(end);
+}
+
 // --- Init ---
 
 load();
@@ -226,8 +293,11 @@ grid.appendChild(mainTile);
 tiles.forEach(t => grid.appendChild(buildTile(t)));
 layout();
 
-document.getElementById('main-input').oninput = (e) => {
+const mainInput = document.getElementById('main-input');
+
+mainInput.oninput = (e) => {
   mainText = e.target.value;
+  caretPos = mainInput.selectionStart;
   clearTimeout(mainTimer);
   if (!mainText.trim()) {
     resetAndRun([]);
@@ -236,5 +306,19 @@ document.getElementById('main-input').oninput = (e) => {
   }
   mainTimer = setTimeout(() => resetAndRun(tiles.map(t => t.id)), DEBOUNCE);
 };
+
+function scheduleCaretRun() {
+  caretPos = mainInput.selectionStart;
+  if (!mainText.trim()) return;
+  clearTimeout(mainTimer);
+  mainTimer = setTimeout(() => resetAndRun(tiles.map(t => t.id)), DEBOUNCE);
+}
+
+mainInput.addEventListener('click', scheduleCaretRun);
+mainInput.addEventListener('keyup', (e) => {
+  if (e.key.startsWith('Arrow') || ['Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) {
+    scheduleCaretRun();
+  }
+});
 
 addBtn.onclick = addTile;

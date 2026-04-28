@@ -1,10 +1,38 @@
 'use strict';
 
-const API = 'http://127.0.0.1:1234/v1/chat/completions';
 const DEFAULT_PROMPT1 = 'You are a writing coach. Your task is to rewrite the following text to prioritize simplicity, clarity and brevity. Your reply MUST contain ONLY the rewritten text, nothing else.';
 const DEFAULT_PROMPT2 = 'You are a writing coach. Your task is to rewrite just the selected sentence for professionalism, conciseness and focus on impact.';
 const DEBOUNCE = 400;
 const STORE = 'wa';
+const CFG_STORE = 'wa-cfg';
+
+// --- Config ---
+
+let cfg = { url: '', apiKey: '', model: '' };
+
+function saveCfg() {
+  localStorage.setItem(CFG_STORE, JSON.stringify(cfg));
+}
+
+function applyCfgToUI() {
+  document.getElementById('cfg-url').value   = cfg.url;
+  document.getElementById('cfg-key').value   = cfg.apiKey;
+  document.getElementById('cfg-model').value = cfg.model;
+}
+
+function loadCfg() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(CFG_STORE));
+    if (saved?.apiKey) { cfg = saved; applyCfgToUI(); return; }
+  } catch {}
+  // First run — seed from env.var
+  fetch('env.var').then(r => r.text()).then(text => {
+    const kv = key => { const m = text.match(new RegExp('^' + key + '\\s*[=:]\\s*[\'"]?([^\'"\\s]+)', 'im')); return m ? m[1] : ''; };
+    cfg = { url: kv('url'), apiKey: kv('apikey'), model: kv('model') };
+    saveCfg();
+    applyCfgToUI();
+  }).catch(() => {});
+}
 
 // --- State ---
 let tiles = [];   // [{id, prompt}]
@@ -182,45 +210,33 @@ async function runLoop(v) {
 }
 
 async function doStream(sys, user, out, signal, original, emphStart, emphEnd) {
-  const r = await fetch(API, {
+  const r = await fetch('/proxy', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-target-url': cfg.url,
+      'x-api-key':    cfg.apiKey,
+    },
     body: JSON.stringify({
-      model: 'local',
+      model: cfg.model,
       stream: false,
       messages: [
         { role: 'system', content: sys },
-        { role: 'user', content: user }
+        { role: 'user', content: user },
       ],
-      reasoning_effort: 'high',
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'rewrite',
-          strict: true,
-          schema: {
-            type: 'object',
-            properties: { rewritten_message: { type: 'string' } },
-            required: ['rewritten_message'],
-            additionalProperties: false
-          }
-        }
-      }
     }),
     signal
   });
 
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  const body = await r.text();
+  if (!r.ok) throw new Error(`HTTP ${r.status}: ${body.slice(0, 300)}`);
 
-  const data = await r.json();
-  const raw = data?.choices?.[0]?.message?.content;
-  if (raw && out) {
-    try {
-      renderOutput(out, JSON.parse(raw).rewritten_message ?? '', original, emphStart, emphEnd);
-    } catch {
-      out.textContent = raw;
-    }
-  }
+  let data;
+  try { data = JSON.parse(body); }
+  catch { throw new Error(`Bad JSON: ${body.slice(0, 300)}`); }
+
+  const text = data?.choices?.[0]?.message?.content ?? '';
+  if (out) renderOutput(out, text, original, emphStart, emphEnd);
 }
 
 function renderOutput(out, response, original, start, end) {
@@ -303,6 +319,7 @@ function computeEmphasis(text, pos, scope) {
 
 // --- Init ---
 
+loadCfg();
 load();
 
 const mainTile = document.createElement('div');
@@ -342,3 +359,7 @@ mainInput.addEventListener('keyup', (e) => {
 });
 
 addBtn.onclick = addTile;
+
+document.getElementById('cfg-url').oninput   = e => { cfg.url    = e.target.value.trim(); saveCfg(); };
+document.getElementById('cfg-key').oninput   = e => { cfg.apiKey = e.target.value.trim(); saveCfg(); };
+document.getElementById('cfg-model').oninput = e => { cfg.model  = e.target.value.trim(); saveCfg(); };

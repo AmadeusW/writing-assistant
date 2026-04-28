@@ -69,23 +69,15 @@ function buildTile(tile) {
   el.dataset.id = tile.id;
   el.innerHTML = `
     <div class="tile-bar">
-      <button class="btn-mode" title="Edit prompt">✏</button>
       <button class="btn-copy" title="Copy output">⎘</button>
       <button class="btn-del" title="Remove tile">✕</button>
     </div>
     <div class="tile-body">
-      <textarea class="tile-prompt" placeholder="System prompt…" spellcheck="false"></textarea>
       <div class="tile-output"></div>
+      <textarea class="tile-prompt" placeholder="System prompt…" spellcheck="false"></textarea>
     </div>`;
 
   el.querySelector('.tile-prompt').value = tile.prompt;
-
-  const modeBtn = el.querySelector('.btn-mode');
-  modeBtn.onclick = () => {
-    const editing = el.classList.toggle('mode-edit');
-    modeBtn.textContent = editing ? '◉' : '✏';
-    modeBtn.title = editing ? 'View output' : 'Edit prompt';
-  };
 
   el.querySelector('.btn-copy').onclick = () =>
     navigator.clipboard.writeText(el.querySelector('.tile-output').textContent).catch(() => {});
@@ -113,9 +105,6 @@ function addTile() {
   const el = buildTile(tile);
   grid.appendChild(el);
   layout();
-  el.classList.add('mode-edit');
-  el.querySelector('.btn-mode').textContent = '◉';
-  el.querySelector('.btn-mode').title = 'View output';
   el.querySelector('.tile-prompt').focus();
 }
 

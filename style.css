@@ -123,34 +123,38 @@ body {
 /* Output tile content area */
 .tile-body {
   flex: 1;
-  position: relative;
+  display: flex;
+  flex-direction: column;
   min-height: 0;
 }
 
-.tile-prompt,
 .tile-output {
-  position: absolute;
-  inset: 0;
+  flex: 3;
+  min-height: 0;
   padding: 12px;
   font-family: inherit;
   font-size: 14px;
   line-height: 1.65;
   overflow: auto;
-}
-
-.tile-prompt {
-  border: none;
-  resize: none;
-  outline: none;
-  background: #fafafa;
-  color: #444;
-  display: none;
-}
-
-.tile-output {
   white-space: pre-wrap;
   word-break: break-word;
   color: #222;
+}
+
+.tile-prompt {
+  flex: 1;
+  min-height: 60px;
+  padding: 10px 12px;
+  border: none;
+  border-top: 1px solid #e8e8e8;
+  resize: none;
+  outline: none;
+  background: #fafafa;
+  color: #666;
+  font-family: inherit;
+  font-size: 13px;
+  line-height: 1.55;
+  overflow: auto;
 }
 
 /* Streaming cursor */
@@ -164,6 +168,3 @@ body {
   50% { opacity: 0; }
 }
 
-/* Edit mode: show prompt textarea, hide output */
-.output-tile.mode-edit .tile-prompt { display: block; }
-.output-tile.mode-edit .tile-output { display: none; }

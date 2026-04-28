@@ -157,6 +157,16 @@ body {
   overflow: auto;
 }
 
+/* Context / rewrite colorization in output tiles */
+.tile-output .ctx {
+  color: #b0b0b0;
+}
+
+.tile-output .rewrite {
+  background: rgba(74, 158, 255, 0.13);
+  border-radius: 2px;
+}
+
 /* Streaming cursor */
 .output-tile.streaming .tile-output::after {
   content: '|';

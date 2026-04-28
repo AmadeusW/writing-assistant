@@ -93,6 +93,7 @@ function buildTile(tile) {
     clearTimeout(tileTimers.get(tile.id));
     tileTimers.set(tile.id, setTimeout(() => {
       tileTimers.delete(tile.id);
+      lastUserText.delete(tile.id);
       enqueue(tile.id);
     }, DEBOUNCE));
   };
@@ -154,7 +155,7 @@ async function runLoop(v) {
     const tile = tiles.find(t => t.id === id);
     if (!tile || !tile.prompt.trim() || !mainText.trim()) continue;
 
-    const userText = emphasizeText(mainText, snapCaret, detectScope(tile.prompt));
+    const { userText, start: emphStart, end: emphEnd } = computeEmphasis(mainText, snapCaret, detectScope(tile.prompt));
     if (userText === lastUserText.get(id)) continue;
     lastUserText.set(id, userText);
 
@@ -166,7 +167,7 @@ async function runLoop(v) {
     if (el) el.classList.add('streaming');
 
     try {
-      await doStream(tile.prompt, userText, out, currentAbort.signal);
+      await doStream(tile.prompt, userText, out, currentAbort.signal, mainText, emphStart, emphEnd);
     } catch (e) {
       if (e.name === 'AbortError') {
         if (el) el.classList.remove('streaming');
@@ -181,7 +182,7 @@ async function runLoop(v) {
   if (v === loopVer) { processingId = null; currentAbort = null; }
 }
 
-async function doStream(sys, user, out, signal) {
+async function doStream(sys, user, out, signal, original, emphStart, emphEnd) {
   const r = await fetch(API, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -216,11 +217,28 @@ async function doStream(sys, user, out, signal) {
   const raw = data?.choices?.[0]?.message?.content;
   if (raw && out) {
     try {
-      out.textContent = JSON.parse(raw).rewritten_message ?? '';
+      renderOutput(out, JSON.parse(raw).rewritten_message ?? '', original, emphStart, emphEnd);
     } catch {
       out.textContent = raw;
     }
   }
+}
+
+function renderOutput(out, response, original, start, end) {
+  while (out.firstChild) out.removeChild(out.firstChild);
+  if (start === 0 && end === original.length) {
+    out.textContent = response;
+    return;
+  }
+  const append = (cls, txt) => {
+    const s = document.createElement('span');
+    s.className = cls;
+    s.textContent = txt;
+    out.appendChild(s);
+  };
+  if (start > 0) append('ctx', original.slice(0, start));
+  append('rewrite', response);
+  if (end < original.length) append('ctx', original.slice(end));
 }
 
 // --- Caret-based emphasis ---
@@ -268,18 +286,20 @@ function getParagraphBounds(text, pos) {
   return { start, end };
 }
 
-function emphasizeText(text, pos, scope) {
-  if (scope === 'text' || !text.trim()) return text;
+function computeEmphasis(text, pos, scope) {
+  const full = { userText: text, start: 0, end: text.length };
+  if (scope === 'text' || !text.trim()) return full;
   let bounds;
   if (scope === 'word') bounds = getWordBounds(text, pos);
   else if (scope === 'sentence') bounds = getSentenceBounds(text, pos);
   else if (scope === 'paragraph') bounds = getParagraphBounds(text, pos);
-  if (!bounds) return text;
+  if (!bounds) return full;
   let { start, end } = bounds;
   while (start < end && /\s/.test(text[start])) start++;
   while (end > start && /\s/.test(text[end - 1])) end--;
-  if (start >= end) return text;
-  return text.slice(0, start) + '**' + text.slice(start, end) + '**' + text.slice(end);
+  if (start >= end) return full;
+  const userText = text.slice(0, start) + '**' + text.slice(start, end) + '**' + text.slice(end);
+  return { userText, start, end };
 }
 
 // --- Init ---

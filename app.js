@@ -200,8 +200,8 @@ async function doStream(sys, user, out, signal, original, emphStart, emphEnd) {
           strict: true,
           schema: {
             type: 'object',
-            properties: { rewritten_message: { type: 'string' } },
-            required: ['rewritten_message'],
+            properties: { rewritten_text: { type: 'string' } },
+            required: ['rewritten_text'],
             additionalProperties: false
           }
         }
@@ -216,7 +216,7 @@ async function doStream(sys, user, out, signal, original, emphStart, emphEnd) {
   const raw = data?.choices?.[0]?.message?.content;
   if (raw && out) {
     try {
-      renderOutput(out, JSON.parse(raw).rewritten_message ?? '', original, emphStart, emphEnd);
+      renderOutput(out, JSON.parse(raw).rewritten_text ?? '', original, emphStart, emphEnd);
     } catch {
       out.textContent = raw;
     }

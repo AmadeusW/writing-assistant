@@ -5,12 +5,16 @@ const DEFAULT_PROMPT2 = 'Rewrite the selected sentence for professionalism, conc
 const DEFAULT_PROMPT3 = 'Within the following text, find the selected word. Using your knowledge of words and thesaurus, respond with EXACTLY 3 words that might be suitable replacements of this exact selected word.';
 const DEBOUNCE = 400;
 const STORE = 'wa';
-const CFG_STORE = 'wa-cfg';
+const CFG_STORE = 'wa-cfg_alt2';
 const SAVED_CFGS_STORE = 'wa-saved-cfgs';
 
 // --- Config ---
 
-let cfg = { url: '', apiKey: '', model: '', parallel: true };
+let cfg = { 
+  url: 'https://openrouter.ai/api/v1/chat/completions', 
+  apiKey: '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', 
+  model: 'google/gemini-3-flash-preview', 
+  parallel: true };
 let savedCfgs = []; // [{url, apiKey, model, label}]
 
 function saveCfg() {
@@ -77,13 +81,9 @@ function loadCfg() {
     const saved = JSON.parse(localStorage.getItem(CFG_STORE));
     if (saved?.apiKey) { cfg = { parallel: true, ...saved }; applyCfgToUI(); return; }
   } catch {}
-  // First run — seed from env.var
-  fetch('env.var').then(r => r.text()).then(text => {
-    const kv = key => { const m = text.match(new RegExp('^' + key + '\\s*[=:]\\s*[\'"]?([^\'"\\s]+)', 'im')); return m ? m[1] : ''; };
-    cfg = { url: kv('url'), apiKey: kv('apikey'), model: kv('model'), parallel: true };
-    saveCfg();
-    applyCfgToUI();
-  }).catch(() => {});
+
+  saveCfg();
+  applyCfgToUI();
 }
 
 // --- State ---

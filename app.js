@@ -5,10 +5,12 @@ const DEFAULT_PROMPT2 = 'You are a writing coach. Your task is to rewrite just t
 const DEBOUNCE = 400;
 const STORE = 'wa';
 const CFG_STORE = 'wa-cfg';
+const SAVED_CFGS_STORE = 'wa-saved-cfgs';
 
 // --- Config ---
 
 let cfg = { url: '', apiKey: '', model: '' };
+let savedCfgs = []; // [{url, apiKey, model, label}]
 
 function saveCfg() {
   localStorage.setItem(CFG_STORE, JSON.stringify(cfg));
@@ -20,7 +22,55 @@ function applyCfgToUI() {
   document.getElementById('cfg-model').value = cfg.model;
 }
 
+function cfgLabel(url, model) {
+  try { return `${model || '(no model)'} at ${new URL(url).host}`; }
+  catch { return model || url || '(unnamed)'; }
+}
+
+function rebuildSavedSelect() {
+  const sel = document.getElementById('cfg-saved');
+  sel.options[0].textContent = 'Saved configs…';
+  sel.options[0].disabled = true;
+  while (sel.options.length > 1) sel.remove(1);
+  savedCfgs.forEach((c, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = c.label;
+    sel.appendChild(opt);
+  });
+  sel.value = '';
+}
+
+function markCfgDirty() {
+  const sel = document.getElementById('cfg-saved');
+  sel.options[0].textContent = 'Unsaved config.';
+  sel.options[0].disabled = false;
+  sel.value = '';
+}
+
+function persistSavedCfgs() {
+  localStorage.setItem(SAVED_CFGS_STORE, JSON.stringify(savedCfgs));
+}
+
+function saveCurrentCfg() {
+  const label = cfgLabel(cfg.url, cfg.model);
+  const idx = savedCfgs.findIndex(c => c.url === cfg.url && c.model === cfg.model);
+  const entry = { url: cfg.url, apiKey: cfg.apiKey, model: cfg.model, label };
+  if (idx !== -1) savedCfgs[idx] = entry;
+  else savedCfgs.push(entry);
+  persistSavedCfgs();
+  rebuildSavedSelect();
+  const newIdx = savedCfgs.findIndex(c => c.url === cfg.url && c.model === cfg.model);
+  document.getElementById('cfg-saved').value = newIdx;
+}
+
 function loadCfg() {
+  try {
+    const sc = JSON.parse(localStorage.getItem(SAVED_CFGS_STORE));
+    if (Array.isArray(sc)) savedCfgs = sc;
+  } catch {}
+  rebuildSavedSelect();
+
   try {
     const saved = JSON.parse(localStorage.getItem(CFG_STORE));
     if (saved?.apiKey) { cfg = saved; applyCfgToUI(); return; }
@@ -49,7 +99,17 @@ const lastUserText = new Map(); // tile id → last userText sent
 
 // --- Debounce timers ---
 let mainTimer = null;
+let cfgTimer = null;
 const tileTimers = new Map();
+
+function debouncedCfgRefresh() {
+  clearTimeout(cfgTimer);
+  cfgTimer = setTimeout(() => {
+    if (!mainText.trim()) return;
+    lastUserText.clear();
+    resetAndRun(tiles.map(t => t.id));
+  }, DEBOUNCE);
+}
 
 // --- DOM ---
 const grid = document.getElementById('grid');
@@ -369,6 +429,16 @@ mainInput.addEventListener('keyup', (e) => {
 
 addBtn.onclick = addTile;
 
-document.getElementById('cfg-url').oninput   = e => { cfg.url    = e.target.value.trim(); saveCfg(); };
-document.getElementById('cfg-key').oninput   = e => { cfg.apiKey = e.target.value.trim(); saveCfg(); };
-document.getElementById('cfg-model').oninput = e => { cfg.model  = e.target.value.trim(); saveCfg(); };
+document.getElementById('cfg-url').oninput   = e => { cfg.url    = e.target.value.trim(); saveCfg(); markCfgDirty(); debouncedCfgRefresh(); };
+document.getElementById('cfg-key').oninput   = e => { cfg.apiKey = e.target.value.trim(); saveCfg(); markCfgDirty(); debouncedCfgRefresh(); };
+document.getElementById('cfg-model').oninput = e => { cfg.model  = e.target.value.trim(); saveCfg(); markCfgDirty(); debouncedCfgRefresh(); };
+
+document.getElementById('cfg-save').onclick = saveCurrentCfg;
+
+document.getElementById('cfg-saved').onchange = e => {
+  const idx = parseInt(e.target.value, 10);
+  if (isNaN(idx) || !savedCfgs[idx]) return;
+  cfg = { ...savedCfgs[idx] };
+  saveCfg();
+  applyCfgToUI();
+};

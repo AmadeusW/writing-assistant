@@ -1,7 +1,8 @@
 # Writing Assistant
 
-Writing Assistant improves the choice of words, structure of sentences, flow of paragraphs.
+[Writing Assistant](https://writing-assistant-3ns5.onrender.com/) improves the choice of words, structure of sentences and flow of paragraphs.
 
+_screenshot showing old version that worked entirely locally with LMStudio_
 <img width="992" height="688" alt="v0.1 demo" src="https://github.com/user-attachments/assets/ce6761b5-1ebe-4e30-8f25-cafd5cb27c75" />
 
 ## How to use it
@@ -12,8 +13,12 @@ Writing Assistant improves the choice of words, structure of sentences, flow of 
 - Effectively you get rapid feedback for your input text.
 
 ### Scoping
-Scope LLM refinement to specific phrase:
-When system prompt includes keywords like `paragraph`, `sentence` and `word`, that phrase directly under cursor is surrounded by `[SELECTED]...[/SELECTED]`, and LLM refinement is scoped to just this phrase.
+Scope LLM refinement to specific phrase by including keywords in the system prompt:
+- `paragraph`,
+- `sentence`,
+- `word`
+LLM refinement is scoped to just that kind of phrase under the cursor.
+In the request to LLM, that phrase is surrounded by `[SELECTED]...[/SELECTED]`.
 
 ### On line
 
@@ -21,19 +26,19 @@ When system prompt includes keywords like `paragraph`, `sentence` and `word`, th
 
 You can use any OpenAI compatible endpoint, such as OpenRouter. Bring your own key.
 
-URL: `https://openrouter.ai/api/v1/chat/completions`
-Key: `sk-or-v1-...` (your own key)
-Model: `google/gemini-3-flash-preview` (recommend a fast and small model)
-Parallel: checked
+- URL: `https://openrouter.ai/api/v1/chat/completions`
+- Key: `sk-or-v1-...` (your own key)
+- Model: `google/gemini-3-flash-preview` (recommend a fast and small model)
+- Parallel: checked
 
 ### Locally
 
 You can use any OpenAI compatible endpoint, such as OpenRouter or LM Studio
 
-Launch with `node server.js`, go to `http://localhost:7777`
-URL: `http://localhost:1234/api/v1/chat/completions`
-Key: not needed
-Model: not needed
-Parallel: unchecked
+- Launch with `node server.js`, go to `http://localhost:7777`
+- URL: `http://localhost:1234/api/v1/chat/completions`
+- Key: not needed
+- Model: not needed
+- Parallel: unchecked
 
 

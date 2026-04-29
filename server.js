@@ -5,7 +5,7 @@ const https = require('https');
 const fs    = require('fs');
 const path  = require('path');
 
-const PORT = process.env.PORT || 8000;
+const PORT = process.env.PORT || 7777;
 const ROOT = path.resolve(__dirname);
 
 const MIME = {
@@ -117,6 +117,6 @@ const server = http.createServer((req, res) => {
   res.writeHead(405); res.end();
 });
 
-server.listen(PORT, '127.0.0.1', () => {
+server.listen(PORT, '0.0.0.0', () => {
   console.log(`Writing Assistant → http://localhost:${PORT}`);
 });

@@ -1,13 +1,91 @@
 'use strict';
 
-const API = 'http://127.0.0.1:1234/v1/chat/completions';
 const DEFAULT_PROMPT1 = 'You are a writing coach. Your task is to rewrite the following text to prioritize simplicity, clarity and brevity. Your reply MUST contain ONLY the rewritten text, nothing else.';
 const DEFAULT_PROMPT2 = 'You are a writing coach. Your task is to rewrite just the selected sentence for professionalism, conciseness and focus on impact.';
 const DEBOUNCE = 400;
 const STORE = 'wa';
+const CFG_STORE = 'wa-cfg';
+const SAVED_CFGS_STORE = 'wa-saved-cfgs';
+
+// --- Config ---
+
+let cfg = { url: '', apiKey: '', model: '' };
+let savedCfgs = []; // [{url, apiKey, model, label}]
+
+function saveCfg() {
+  localStorage.setItem(CFG_STORE, JSON.stringify(cfg));
+}
+
+function applyCfgToUI() {
+  document.getElementById('cfg-url').value   = cfg.url;
+  document.getElementById('cfg-key').value   = cfg.apiKey;
+  document.getElementById('cfg-model').value = cfg.model;
+}
+
+function cfgLabel(url, model) {
+  try { return `${model || '(no model)'} at ${new URL(url).host}`; }
+  catch { return model || url || '(unnamed)'; }
+}
+
+function rebuildSavedSelect() {
+  const sel = document.getElementById('cfg-saved');
+  sel.options[0].textContent = 'Saved configs…';
+  sel.options[0].disabled = true;
+  while (sel.options.length > 1) sel.remove(1);
+  savedCfgs.forEach((c, i) => {
+    const opt = document.createElement('option');
+    opt.value = i;
+    opt.textContent = c.label;
+    sel.appendChild(opt);
+  });
+  sel.value = '';
+}
+
+function markCfgDirty() {
+  const sel = document.getElementById('cfg-saved');
+  sel.options[0].textContent = 'Unsaved config.';
+  sel.options[0].disabled = false;
+  sel.value = '';
+}
+
+function persistSavedCfgs() {
+  localStorage.setItem(SAVED_CFGS_STORE, JSON.stringify(savedCfgs));
+}
+
+function saveCurrentCfg() {
+  const label = cfgLabel(cfg.url, cfg.model);
+  const idx = savedCfgs.findIndex(c => c.url === cfg.url && c.model === cfg.model);
+  const entry = { url: cfg.url, apiKey: cfg.apiKey, model: cfg.model, label };
+  if (idx !== -1) savedCfgs[idx] = entry;
+  else savedCfgs.push(entry);
+  persistSavedCfgs();
+  rebuildSavedSelect();
+  const newIdx = savedCfgs.findIndex(c => c.url === cfg.url && c.model === cfg.model);
+  document.getElementById('cfg-saved').value = newIdx;
+}
+
+function loadCfg() {
+  try {
+    const sc = JSON.parse(localStorage.getItem(SAVED_CFGS_STORE));
+    if (Array.isArray(sc)) savedCfgs = sc;
+  } catch {}
+  rebuildSavedSelect();
+
+  try {
+    const saved = JSON.parse(localStorage.getItem(CFG_STORE));
+    if (saved?.apiKey) { cfg = saved; applyCfgToUI(); return; }
+  } catch {}
+  // First run — seed from env.var
+  fetch('env.var').then(r => r.text()).then(text => {
+    const kv = key => { const m = text.match(new RegExp('^' + key + '\\s*[=:]\\s*[\'"]?([^\'"\\s]+)', 'im')); return m ? m[1] : ''; };
+    cfg = { url: kv('url'), apiKey: kv('apikey'), model: kv('model') };
+    saveCfg();
+    applyCfgToUI();
+  }).catch(() => {});
+}
 
 // --- State ---
-let tiles = [];   // [{id, prompt}]
+let tiles = [];   // [{id, prompt, outputRatio}]
 let nextId = 1;
 let mainText = '';
 let caretPos = 0;
@@ -21,7 +99,17 @@ const lastUserText = new Map(); // tile id → last userText sent
 
 // --- Debounce timers ---
 let mainTimer = null;
+let cfgTimer = null;
 const tileTimers = new Map();
+
+function debouncedCfgRefresh() {
+  clearTimeout(cfgTimer);
+  cfgTimer = setTimeout(() => {
+    if (!mainText.trim()) return;
+    lastUserText.clear();
+    resetAndRun(tiles.map(t => t.id));
+  }, DEBOUNCE);
+}
 
 // --- DOM ---
 const grid = document.getElementById('grid');
@@ -33,12 +121,19 @@ function load() {
   try {
     const d = JSON.parse(localStorage.getItem(STORE));
     if (d?.tiles?.length) {
-      tiles = d.tiles;
+      tiles = d.tiles.map(t => ({
+        id: t.id,
+        prompt: t.prompt || '',
+        outputRatio: typeof t.outputRatio === 'number' ? t.outputRatio : 0.75
+      }));
       nextId = d.nextId || tiles.length + 1;
       return;
     }
   } catch {}
-  tiles = [{ id: nextId++, prompt: DEFAULT_PROMPT1 }, { id: nextId++, prompt: DEFAULT_PROMPT2 }];
+  tiles = [
+    { id: nextId++, prompt: DEFAULT_PROMPT1, outputRatio: 0.75 },
+    { id: nextId++, prompt: DEFAULT_PROMPT2, outputRatio: 0.75 }
+  ];
   persist();
 }
 
@@ -77,10 +172,13 @@ function buildTile(tile) {
     </div>
     <div class="tile-body">
       <div class="tile-output"></div>
+      <div class="tile-splitter" title="Drag to resize"></div>
       <textarea class="tile-prompt" placeholder="System prompt…" spellcheck="false"></textarea>
     </div>`;
 
   el.querySelector('.tile-prompt').value = tile.prompt;
+  applyTileSplit(tile.id, tile.outputRatio || 0.75);
+  attachSplitterHandlers(el, tile);
 
   el.querySelector('.btn-copy').onclick = () =>
     navigator.clipboard.writeText(el.querySelector('.tile-output').textContent).catch(() => {});
@@ -103,13 +201,70 @@ function buildTile(tile) {
 
 function addTile() {
   if (tiles.length >= 8) return;
-  const tile = { id: nextId++, prompt: '' };
+  const tile = { id: nextId++, prompt: '', outputRatio: 0.75 };
   tiles.push(tile);
   persist();
   const el = buildTile(tile);
   grid.appendChild(el);
   layout();
   el.querySelector('.tile-prompt').focus();
+}
+
+function applyTileSplit(id, ratio) {
+  const el = tileEl(id);
+  if (!el) return;
+  const clamped = Math.max(0.2, Math.min(0.85, ratio));
+  const output = el.querySelector('.tile-output');
+  if (output) output.style.flexBasis = `${(clamped * 100).toFixed(2)}%`;
+}
+
+function attachSplitterHandlers(el, tile) {
+  const body = el.querySelector('.tile-body');
+  const splitter = el.querySelector('.tile-splitter');
+  if (!body || !splitter) return;
+
+  const minSectionPx = 48;
+  const onPointerMove = (evt) => {
+    const rect = body.getBoundingClientRect();
+    const splitterHeight = splitter.offsetHeight;
+    const available = rect.height - splitterHeight;
+    if (available <= minSectionPx * 2) return;
+
+    const y = evt.clientY - rect.top;
+    const minTop = minSectionPx;
+    const maxTop = available - minSectionPx;
+    const top = Math.max(minTop, Math.min(maxTop, y));
+    const ratio = top / available;
+
+    tile.outputRatio = ratio;
+    applyTileSplit(tile.id, ratio);
+  };
+
+  const stopDrag = (pointerId) => {
+    document.body.classList.remove('split-resizing');
+    splitter.classList.remove('active');
+    if (pointerId !== undefined) {
+      try { splitter.releasePointerCapture(pointerId); } catch {}
+    }
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('pointercancel', onPointerCancel);
+    persist();
+  };
+
+  const onPointerUp = (evt) => stopDrag(evt.pointerId);
+  const onPointerCancel = (evt) => stopDrag(evt.pointerId);
+
+  splitter.addEventListener('pointerdown', (evt) => {
+    evt.preventDefault();
+    splitter.classList.add('active');
+    document.body.classList.add('split-resizing');
+    splitter.setPointerCapture(evt.pointerId);
+    onPointerMove(evt);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerCancel);
+  });
 }
 
 function delTile(id) {
@@ -182,45 +337,42 @@ async function runLoop(v) {
 }
 
 async function doStream(sys, user, out, signal, original, emphStart, emphEnd) {
-  const r = await fetch(API, {
+  const targetUrl = cfg.url || '';
+  const apiKey    = cfg.apiKey || '';
+  console.log('[wa] doStream | x-target-url:', JSON.stringify(targetUrl),
+    '| x-api-key:', apiKey ? `"${apiKey.slice(0, 8)}…"` : '(empty)');
+
+  const r = await fetch('/proxy', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-target-url': targetUrl,
+      'x-api-key':    apiKey,
+    },
     body: JSON.stringify({
-      model: 'local',
+      model: cfg.model || '',
       stream: false,
       messages: [
         { role: 'system', content: sys },
-        { role: 'user', content: user }
+        { role: 'user', content: user },
       ],
-      reasoning_effort: 'high',
-      response_format: {
-        type: 'json_schema',
-        json_schema: {
-          name: 'rewrite',
-          strict: true,
-          schema: {
-            type: 'object',
-            properties: { rewritten_text: { type: 'string' } },
-            required: ['rewritten_text'],
-            additionalProperties: false
-          }
-        }
-      }
     }),
     signal
   });
 
-  if (!r.ok) throw new Error(`HTTP ${r.status}`);
-
-  const data = await r.json();
-  const raw = data?.choices?.[0]?.message?.content;
-  if (raw && out) {
-    try {
-      renderOutput(out, JSON.parse(raw).rewritten_text ?? '', original, emphStart, emphEnd);
-    } catch {
-      out.textContent = raw;
-    }
+  console.log('[wa] proxy response status:', r.status);
+  const body = await r.text();
+  if (!r.ok) {
+    console.error('[wa] proxy error body:', body.slice(0, 500));
+    throw new Error(`HTTP ${r.status}: ${body.slice(0, 300)}`);
   }
+
+  let data;
+  try { data = JSON.parse(body); }
+  catch { throw new Error(`Bad JSON: ${body.slice(0, 300)}`); }
+
+  const text = data?.choices?.[0]?.message?.content ?? '';
+  if (out) renderOutput(out, text, original, emphStart, emphEnd);
 }
 
 function renderOutput(out, response, original, start, end) {
@@ -303,6 +455,7 @@ function computeEmphasis(text, pos, scope) {
 
 // --- Init ---
 
+loadCfg();
 load();
 
 const mainTile = document.createElement('div');
@@ -342,3 +495,17 @@ mainInput.addEventListener('keyup', (e) => {
 });
 
 addBtn.onclick = addTile;
+
+document.getElementById('cfg-url').oninput   = e => { cfg.url    = e.target.value.trim(); saveCfg(); markCfgDirty(); debouncedCfgRefresh(); };
+document.getElementById('cfg-key').oninput   = e => { cfg.apiKey = e.target.value.trim(); saveCfg(); markCfgDirty(); debouncedCfgRefresh(); };
+document.getElementById('cfg-model').oninput = e => { cfg.model  = e.target.value.trim(); saveCfg(); markCfgDirty(); debouncedCfgRefresh(); };
+
+document.getElementById('cfg-save').onclick = saveCurrentCfg;
+
+document.getElementById('cfg-saved').onchange = e => {
+  const idx = parseInt(e.target.value, 10);
+  if (isNaN(idx) || !savedCfgs[idx]) return;
+  cfg = { ...savedCfgs[idx] };
+  saveCfg();
+  applyCfgToUI();
+};

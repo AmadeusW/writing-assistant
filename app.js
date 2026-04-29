@@ -5,14 +5,14 @@ const DEFAULT_PROMPT2 = 'Rewrite the selected sentence for professionalism, conc
 const DEFAULT_PROMPT3 = 'Within the following text, find the selected word. Using your knowledge of words and thesaurus, respond with EXACTLY 3 words that might be suitable replacements of this exact selected word.';
 const DEBOUNCE = 400;
 const STORE = 'wa';
-const CFG_STORE = 'wa-cfg_alt2';
+const CFG_STORE = 'wa-cfg';
 const SAVED_CFGS_STORE = 'wa-saved-cfgs';
 
 // --- Config ---
 
 let cfg = { 
   url: 'https://openrouter.ai/api/v1/chat/completions', 
-  apiKey: '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', 
+  apiKey: '', 
   model: 'google/gemini-3-flash-preview', 
   parallel: true };
 let savedCfgs = []; // [{url, apiKey, model, label}]
@@ -79,7 +79,11 @@ function loadCfg() {
 
   try {
     const saved = JSON.parse(localStorage.getItem(CFG_STORE));
-    if (saved?.apiKey) { cfg = { parallel: true, ...saved }; applyCfgToUI(); return; }
+    if (saved && typeof saved === 'object') {
+      cfg = { ...cfg, ...saved };
+      applyCfgToUI();
+      return;
+    }
   } catch {}
 
   saveCfg();
@@ -374,7 +378,7 @@ async function doStream(sys, user, out, signal, original, emphStart, emphEnd) {
   const targetUrl = cfg.url || '';
   const apiKey    = cfg.apiKey || '';
   console.log('[wa] doStream | x-target-url:', JSON.stringify(targetUrl),
-    '| x-api-key:', apiKey ? `"${apiKey.slice(0, 8)}…"` : '(empty)');
+    '| x-api-key:', apiKey ? '(provided by UI)' : '(using server API_KEY if available)');
 
   const r = await fetch('/proxy', {
     method: 'POST',

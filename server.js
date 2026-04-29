@@ -42,11 +42,15 @@ function serveStatic(req, res) {
 
 function handleProxy(req, res) {
   const targetUrl = req.headers['x-target-url'];
-  const apiKey    = req.headers['x-api-key'];
+  const headerApiKey = req.headers['x-api-key'];
+  const envApiKey = process.env.API_KEY;
+  const apiKey = (typeof headerApiKey === 'string' && headerApiKey.trim())
+    ? headerApiKey.trim()
+    : (typeof envApiKey === 'string' && envApiKey.trim() ? envApiKey.trim() : '');
 
   console.log('[proxy] incoming headers:',
     'x-target-url =', JSON.stringify(targetUrl),
-    '| x-api-key =', apiKey ? `"${apiKey.slice(0, 8)}…"` : String(apiKey));
+    '| auth source =', headerApiKey ? 'request header' : (envApiKey ? 'API_KEY env' : 'none'));
 
   if (!targetUrl) {
     console.warn('[proxy] rejected: missing x-target-url');

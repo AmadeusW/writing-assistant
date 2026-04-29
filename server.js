@@ -44,17 +44,30 @@ function handleProxy(req, res) {
   const targetUrl = req.headers['x-target-url'];
   const apiKey    = req.headers['x-api-key'];
 
-  if (!targetUrl || !apiKey) {
+  console.log('[proxy] incoming headers:',
+    'x-target-url =', JSON.stringify(targetUrl),
+    '| x-api-key =', apiKey ? `"${apiKey.slice(0, 8)}…"` : String(apiKey));
+
+  if (!targetUrl) {
+    console.warn('[proxy] rejected: missing x-target-url');
     res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Missing x-target-url or x-api-key header' }));
+    res.end(JSON.stringify({ error: 'Missing x-target-url header' }));
     return;
   }
 
   let parsed;
   try { parsed = new URL(targetUrl); }
-  catch {
+  catch (e) {
+    console.warn('[proxy] rejected: URL parse failed for', JSON.stringify(targetUrl), '—', e.message);
     res.writeHead(400, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify({ error: 'Invalid x-target-url' }));
+    res.end(JSON.stringify({ error: `Invalid x-target-url: ${e.message}` }));
+    return;
+  }
+
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') {
+    console.warn('[proxy] rejected: unsupported protocol', parsed.protocol);
+    res.writeHead(400, { 'Content-Type': 'application/json' });
+    res.end(JSON.stringify({ error: `Unsupported protocol: ${parsed.protocol}` }));
     return;
   }
 
@@ -64,24 +77,29 @@ function handleProxy(req, res) {
     const body    = Buffer.concat(chunks);
     const isHttps = parsed.protocol === 'https:';
 
+    const upstreamHeaders = {
+      'content-type':   'application/json',
+      'content-length': body.length,
+      'user-agent':     req.headers['user-agent'] || 'writing-assistant',
+      'referer':        `http://localhost:${PORT}`,
+      'x-title':        'writing-assistant',
+    };
+    if (apiKey) upstreamHeaders['authorization'] = `Bearer ${apiKey}`;
+
     const opts = {
       hostname: parsed.hostname,
       port:     parsed.port || (isHttps ? 443 : 80),
       path:     parsed.pathname + parsed.search,
       method:   'POST',
-      headers: {
-        'content-type':   'application/json',
-        'content-length': body.length,
-        'authorization':  `Bearer ${apiKey}`,
-        'user-agent':     'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-        'referer':        `http://localhost:${PORT}`,
-        'x-title':        'writing-assistant',
-      },
+      headers:  upstreamHeaders,
     };
+
+    console.log('[proxy] forwarding to', `${parsed.protocol}//${parsed.hostname}:${opts.port}${opts.path}`,
+      '| body', body.length, 'bytes', '| auth:', !!apiKey);
 
     const transport = isHttps ? https : http;
     const upstream  = transport.request(opts, upRes => {
-      console.log('[upstream]', upRes.statusCode, upRes.headers['content-type']);
+      console.log('[proxy] upstream response:', upRes.statusCode, upRes.headers['content-type']);
       res.writeHead(upRes.statusCode, {
         'content-type': upRes.headers['content-type'] || 'application/json',
       });
@@ -89,7 +107,7 @@ function handleProxy(req, res) {
     });
 
     upstream.on('error', e => {
-      console.error('[proxy error]', e.message);
+      console.error('[proxy] upstream error:', e.message);
       if (!res.headersSent) {
         res.writeHead(502, { 'content-type': 'application/json' });
         res.end(JSON.stringify({ error: e.message }));

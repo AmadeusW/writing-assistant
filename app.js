@@ -210,15 +210,20 @@ async function runLoop(v) {
 }
 
 async function doStream(sys, user, out, signal, original, emphStart, emphEnd) {
+  const targetUrl = cfg.url || '';
+  const apiKey    = cfg.apiKey || '';
+  console.log('[wa] doStream | x-target-url:', JSON.stringify(targetUrl),
+    '| x-api-key:', apiKey ? `"${apiKey.slice(0, 8)}…"` : '(empty)');
+
   const r = await fetch('/proxy', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
-      'x-target-url': cfg.url,
-      'x-api-key':    cfg.apiKey,
+      'x-target-url': targetUrl,
+      'x-api-key':    apiKey,
     },
     body: JSON.stringify({
-      model: cfg.model,
+      model: cfg.model || '',
       stream: false,
       messages: [
         { role: 'system', content: sys },
@@ -228,8 +233,12 @@ async function doStream(sys, user, out, signal, original, emphStart, emphEnd) {
     signal
   });
 
+  console.log('[wa] proxy response status:', r.status);
   const body = await r.text();
-  if (!r.ok) throw new Error(`HTTP ${r.status}: ${body.slice(0, 300)}`);
+  if (!r.ok) {
+    console.error('[wa] proxy error body:', body.slice(0, 500));
+    throw new Error(`HTTP ${r.status}: ${body.slice(0, 300)}`);
+  }
 
   let data;
   try { data = JSON.parse(body); }

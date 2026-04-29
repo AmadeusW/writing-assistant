@@ -10,7 +10,7 @@ const SAVED_CFGS_STORE = 'wa-saved-cfgs';
 
 // --- Config ---
 
-let cfg = { url: '', apiKey: '', model: '' };
+let cfg = { url: '', apiKey: '', model: '', parallel: true };
 let savedCfgs = []; // [{url, apiKey, model, label}]
 
 function saveCfg() {
@@ -18,9 +18,10 @@ function saveCfg() {
 }
 
 function applyCfgToUI() {
-  document.getElementById('cfg-url').value   = cfg.url;
-  document.getElementById('cfg-key').value   = cfg.apiKey;
-  document.getElementById('cfg-model').value = cfg.model;
+  document.getElementById('cfg-url').value      = cfg.url;
+  document.getElementById('cfg-key').value      = cfg.apiKey;
+  document.getElementById('cfg-model').value    = cfg.model;
+  document.getElementById('cfg-parallel').checked = cfg.parallel !== false;
 }
 
 function cfgLabel(url, model) {
@@ -74,12 +75,12 @@ function loadCfg() {
 
   try {
     const saved = JSON.parse(localStorage.getItem(CFG_STORE));
-    if (saved?.apiKey) { cfg = saved; applyCfgToUI(); return; }
+    if (saved?.apiKey) { cfg = { parallel: true, ...saved }; applyCfgToUI(); return; }
   } catch {}
   // First run — seed from env.var
   fetch('env.var').then(r => r.text()).then(text => {
     const kv = key => { const m = text.match(new RegExp('^' + key + '\\s*[=:]\\s*[\'"]?([^\'"\\s]+)', 'im')); return m ? m[1] : ''; };
-    cfg = { url: kv('url'), apiKey: kv('apikey'), model: kv('model') };
+    cfg = { url: kv('url'), apiKey: kv('apikey'), model: kv('model'), parallel: true };
     saveCfg();
     applyCfgToUI();
   }).catch(() => {});
@@ -94,6 +95,7 @@ let caretPos = 0;
 // --- Request orchestration ---
 let loopVer = 0;
 let currentAbort = null;
+let abortMap = new Map(); // parallel mode: tile id -> AbortController
 let processingId = null;
 let queue = [];
 const lastUserText = new Map(); // tile id → last userText sent
@@ -276,7 +278,8 @@ function delTile(id) {
   tileTimers.delete(id);
   lastUserText.delete(id);
   queue = queue.filter(q => q !== id);
-  const wasProcessing = processingId === id;
+  if (cfg.parallel && abortMap.has(id)) { abortMap.get(id).abort(); abortMap.delete(id); }
+  const wasProcessing = !cfg.parallel && processingId === id;
   tileEl(id)?.remove();
   layout();
   if (wasProcessing) resetAndRun([...queue]);
@@ -285,8 +288,9 @@ function delTile(id) {
 // --- Request orchestration ---
 
 function resetAndRun(newQueue) {
-  if (currentAbort) currentAbort.abort();
-  currentAbort = null;
+  if (currentAbort) { currentAbort.abort(); currentAbort = null; }
+  abortMap.forEach(ac => ac.abort());
+  abortMap.clear();
   processingId = null;
   queue = newQueue;
   const v = ++loopVer;
@@ -294,48 +298,76 @@ function resetAndRun(newQueue) {
 }
 
 function enqueue(id) {
-  if (processingId === id) {
-    resetAndRun([id, ...queue]);
-  } else if (!queue.includes(id)) {
-    queue.push(id);
-    if (!processingId) {
-      const v = ++loopVer;
-      runLoop(v);
+  if (cfg.parallel) {
+    if (abortMap.has(id)) {
+      resetAndRun([id, ...queue]);
+    } else if (!queue.includes(id)) {
+      queue.push(id);
+      if (abortMap.size === 0) { const v = ++loopVer; runLoop(v); }
+    }
+  } else {
+    if (processingId === id) {
+      resetAndRun([id, ...queue]);
+    } else if (!queue.includes(id)) {
+      queue.push(id);
+      if (!processingId) { const v = ++loopVer; runLoop(v); }
     }
   }
 }
 
 async function runLoop(v) {
-  const snapCaret = caretPos;
-  while (queue.length > 0 && v === loopVer) {
-    const id = queue.shift();
-    const tile = tiles.find(t => t.id === id);
-    if (!tile || !tile.prompt.trim() || !mainText.trim()) continue;
-
-    const { userText, start: emphStart, end: emphEnd } = computeEmphasis(mainText, snapCaret, detectScope(tile.prompt));
-    if (userText === lastUserText.get(id)) continue;
-    lastUserText.set(id, userText);
-
-    processingId = id;
-    currentAbort = new AbortController();
-    const out = outputEl(id);
-    const el = tileEl(id);
-    if (el) el.classList.add('streaming');
-
-    try {
-      await doStream(tile.prompt, userText, out, currentAbort.signal, mainText, emphStart, emphEnd);
-    } catch (e) {
-      if (e.name === 'AbortError') {
+  if (cfg.parallel) {
+    const snapCaret = caretPos;
+    const ids = [...queue];
+    queue = [];
+    await Promise.all(ids.map(async id => {
+      const tile = tiles.find(t => t.id === id);
+      if (!tile || !tile.prompt.trim() || !mainText.trim()) return;
+      const { userText, start: emphStart, end: emphEnd } = computeEmphasis(mainText, snapCaret, detectScope(tile.prompt));
+      if (userText === lastUserText.get(id)) return;
+      lastUserText.set(id, userText);
+      const ac = new AbortController();
+      abortMap.set(id, ac);
+      const out = outputEl(id);
+      const el = tileEl(id);
+      if (el) el.classList.add('streaming');
+      try {
+        await doStream(tile.prompt, userText, out, ac.signal, mainText, emphStart, emphEnd);
+      } catch (e) {
+        if (e.name !== 'AbortError' && out && v === loopVer) out.textContent = `[Error: ${e.message}]`;
+      } finally {
+        abortMap.delete(id);
         if (el) el.classList.remove('streaming');
-        return; // caller already reset state; new loop (if any) takes over
       }
-      if (out && v === loopVer) out.textContent = `[Error: ${e.message}]`;
+    }));
+  } else {
+    const snapCaret = caretPos;
+    while (queue.length > 0 && v === loopVer) {
+      const id = queue.shift();
+      const tile = tiles.find(t => t.id === id);
+      if (!tile || !tile.prompt.trim() || !mainText.trim()) continue;
+      const { userText, start: emphStart, end: emphEnd } = computeEmphasis(mainText, snapCaret, detectScope(tile.prompt));
+      if (userText === lastUserText.get(id)) continue;
+      lastUserText.set(id, userText);
+      processingId = id;
+      currentAbort = new AbortController();
+      const out = outputEl(id);
+      const el = tileEl(id);
+      if (el) el.classList.add('streaming');
+      try {
+        await doStream(tile.prompt, userText, out, currentAbort.signal, mainText, emphStart, emphEnd);
+      } catch (e) {
+        if (e.name === 'AbortError') {
+          if (el) el.classList.remove('streaming');
+          return;
+        }
+        if (out && v === loopVer) out.textContent = `[Error: ${e.message}]`;
+      }
+      if (v === loopVer) { processingId = null; currentAbort = null; }
+      if (el) el.classList.remove('streaming');
     }
-
     if (v === loopVer) { processingId = null; currentAbort = null; }
-    if (el) el.classList.remove('streaming');
   }
-  if (v === loopVer) { processingId = null; currentAbort = null; }
 }
 
 async function doStream(sys, user, out, signal, original, emphStart, emphEnd) {
@@ -502,6 +534,7 @@ document.getElementById('cfg-url').oninput   = e => { cfg.url    = e.target.valu
 document.getElementById('cfg-key').oninput   = e => { cfg.apiKey = e.target.value.trim(); saveCfg(); markCfgDirty(); debouncedCfgRefresh(); };
 document.getElementById('cfg-model').oninput = e => { cfg.model  = e.target.value.trim(); saveCfg(); markCfgDirty(); debouncedCfgRefresh(); };
 
+document.getElementById('cfg-parallel').onchange = e => { cfg.parallel = e.target.checked; saveCfg(); };
 document.getElementById('cfg-save').onclick = saveCurrentCfg;
 
 document.getElementById('cfg-saved').onchange = e => {

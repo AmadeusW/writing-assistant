@@ -1,7 +1,8 @@
 'use strict';
 
 const DEFAULT_PROMPT1 = 'You are a writing coach. Your task is to rewrite the following text to prioritize simplicity, clarity and brevity. Your reply MUST contain ONLY the rewritten text, nothing else.';
-const DEFAULT_PROMPT2 = 'You are a writing coach. Your task is to rewrite just the selected sentence for professionalism, conciseness and focus on impact.';
+const DEFAULT_PROMPT2 = 'Rewrite the selected sentence for professionalism, conciseness and focus on impact. Respond only with the rewritten sentence.';
+const DEFAULT_PROMPT3 = 'Within the following text, find the selected word. Using your knowledge of words and thesaurus, respond with EXACTLY 3 words that might be suitable replacements of this exact selected word.';
 const DEBOUNCE = 400;
 const STORE = 'wa';
 const CFG_STORE = 'wa-cfg';
@@ -132,7 +133,8 @@ function load() {
   } catch {}
   tiles = [
     { id: nextId++, prompt: DEFAULT_PROMPT1, outputRatio: 0.75 },
-    { id: nextId++, prompt: DEFAULT_PROMPT2, outputRatio: 0.75 }
+    { id: nextId++, prompt: DEFAULT_PROMPT2, outputRatio: 0.75 },
+    { id: nextId++, prompt: DEFAULT_PROMPT3, outputRatio: 0.75 }
   ];
   persist();
 }

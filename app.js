@@ -85,7 +85,7 @@ function loadCfg() {
 }
 
 // --- State ---
-let tiles = [];   // [{id, prompt}]
+let tiles = [];   // [{id, prompt, outputRatio}]
 let nextId = 1;
 let mainText = '';
 let caretPos = 0;
@@ -121,12 +121,19 @@ function load() {
   try {
     const d = JSON.parse(localStorage.getItem(STORE));
     if (d?.tiles?.length) {
-      tiles = d.tiles;
+      tiles = d.tiles.map(t => ({
+        id: t.id,
+        prompt: t.prompt || '',
+        outputRatio: typeof t.outputRatio === 'number' ? t.outputRatio : 0.75
+      }));
       nextId = d.nextId || tiles.length + 1;
       return;
     }
   } catch {}
-  tiles = [{ id: nextId++, prompt: DEFAULT_PROMPT1 }, { id: nextId++, prompt: DEFAULT_PROMPT2 }];
+  tiles = [
+    { id: nextId++, prompt: DEFAULT_PROMPT1, outputRatio: 0.75 },
+    { id: nextId++, prompt: DEFAULT_PROMPT2, outputRatio: 0.75 }
+  ];
   persist();
 }
 
@@ -165,10 +172,13 @@ function buildTile(tile) {
     </div>
     <div class="tile-body">
       <div class="tile-output"></div>
+      <div class="tile-splitter" title="Drag to resize"></div>
       <textarea class="tile-prompt" placeholder="System prompt…" spellcheck="false"></textarea>
     </div>`;
 
   el.querySelector('.tile-prompt').value = tile.prompt;
+  applyTileSplit(tile.id, tile.outputRatio || 0.75);
+  attachSplitterHandlers(el, tile);
 
   el.querySelector('.btn-copy').onclick = () =>
     navigator.clipboard.writeText(el.querySelector('.tile-output').textContent).catch(() => {});
@@ -191,13 +201,70 @@ function buildTile(tile) {
 
 function addTile() {
   if (tiles.length >= 8) return;
-  const tile = { id: nextId++, prompt: '' };
+  const tile = { id: nextId++, prompt: '', outputRatio: 0.75 };
   tiles.push(tile);
   persist();
   const el = buildTile(tile);
   grid.appendChild(el);
   layout();
   el.querySelector('.tile-prompt').focus();
+}
+
+function applyTileSplit(id, ratio) {
+  const el = tileEl(id);
+  if (!el) return;
+  const clamped = Math.max(0.2, Math.min(0.85, ratio));
+  const output = el.querySelector('.tile-output');
+  if (output) output.style.flexBasis = `${(clamped * 100).toFixed(2)}%`;
+}
+
+function attachSplitterHandlers(el, tile) {
+  const body = el.querySelector('.tile-body');
+  const splitter = el.querySelector('.tile-splitter');
+  if (!body || !splitter) return;
+
+  const minSectionPx = 48;
+  const onPointerMove = (evt) => {
+    const rect = body.getBoundingClientRect();
+    const splitterHeight = splitter.offsetHeight;
+    const available = rect.height - splitterHeight;
+    if (available <= minSectionPx * 2) return;
+
+    const y = evt.clientY - rect.top;
+    const minTop = minSectionPx;
+    const maxTop = available - minSectionPx;
+    const top = Math.max(minTop, Math.min(maxTop, y));
+    const ratio = top / available;
+
+    tile.outputRatio = ratio;
+    applyTileSplit(tile.id, ratio);
+  };
+
+  const stopDrag = (pointerId) => {
+    document.body.classList.remove('split-resizing');
+    splitter.classList.remove('active');
+    if (pointerId !== undefined) {
+      try { splitter.releasePointerCapture(pointerId); } catch {}
+    }
+    window.removeEventListener('pointermove', onPointerMove);
+    window.removeEventListener('pointerup', onPointerUp);
+    window.removeEventListener('pointercancel', onPointerCancel);
+    persist();
+  };
+
+  const onPointerUp = (evt) => stopDrag(evt.pointerId);
+  const onPointerCancel = (evt) => stopDrag(evt.pointerId);
+
+  splitter.addEventListener('pointerdown', (evt) => {
+    evt.preventDefault();
+    splitter.classList.add('active');
+    document.body.classList.add('split-resizing');
+    splitter.setPointerCapture(evt.pointerId);
+    onPointerMove(evt);
+    window.addEventListener('pointermove', onPointerMove);
+    window.addEventListener('pointerup', onPointerUp);
+    window.addEventListener('pointercancel', onPointerCancel);
+  });
 }
 
 function delTile(id) {

@@ -191,7 +191,7 @@ body {
 }
 
 .tile-output {
-  flex: 3;
+  flex: 0 0 75%;
   min-height: 0;
   padding: 12px;
   font-family: inherit;
@@ -203,12 +203,38 @@ body {
   color: #222;
 }
 
+.tile-splitter {
+  height: 7px;
+  flex: 0 0 7px;
+  cursor: row-resize;
+  background: linear-gradient(to bottom, #f3f3f3 0%, #e7e7e7 100%);
+  border-top: 1px solid #e6e6e6;
+  border-bottom: 1px solid #dddddd;
+  position: relative;
+}
+
+.tile-splitter::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 50%;
+  width: 32px;
+  height: 1px;
+  background: #b6b6b6;
+  transform: translateX(-50%);
+  box-shadow: 0 2px 0 #b6b6b6;
+}
+
+.tile-splitter:hover,
+.tile-splitter.active {
+  background: linear-gradient(to bottom, #eaf3ff 0%, #d8e8ff 100%);
+}
+
 .tile-prompt {
-  flex: 1;
+  flex: 1 1 auto;
   min-height: 60px;
   padding: 10px 12px;
   border: none;
-  border-top: 1px solid #e8e8e8;
   resize: none;
   outline: none;
   background: #fafafa;
@@ -217,6 +243,11 @@ body {
   font-size: 13px;
   line-height: 1.55;
   overflow: auto;
+}
+
+body.split-resizing {
+  user-select: none;
+  cursor: row-resize;
 }
 
 /* Context / rewrite colorization in output tiles */

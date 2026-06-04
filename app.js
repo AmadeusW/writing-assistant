@@ -98,6 +98,7 @@ let tiles = [];   // [{id, prompt, outputRatio}]
 let nextId = 1;
 let mainText = '';
 let caretPos = 0;
+let selectionEnd = 0;
 
 // --- Request orchestration ---
 let loopVer = 0;
@@ -358,13 +359,14 @@ function enqueue(id) {
 async function runLoop(v) {
   if (cfg.parallel) {
     const snapCaret = caretPos;
+    const snapSelEnd = selectionEnd;
     const ids = [...queue];
     queue = [];
     await Promise.all(ids.map(async id => {
       const tile = tiles.find(t => t.id === id);
       const prompt = tile && effectivePrompt(tile);
       if (!tile || !prompt.trim() || !mainText.trim()) return;
-      const { userText, start: emphStart, end: emphEnd } = computeEmphasis(mainText, snapCaret, detectScope(prompt));
+      const { userText, start: emphStart, end: emphEnd } = computeEmphasis(mainText, snapCaret, snapSelEnd);
       if (userText === lastUserText.get(id)) return;
       lastUserText.set(id, userText);
       const ac = new AbortController();
@@ -383,12 +385,13 @@ async function runLoop(v) {
     }));
   } else {
     const snapCaret = caretPos;
+    const snapSelEnd = selectionEnd;
     while (queue.length > 0 && v === loopVer) {
       const id = queue.shift();
       const tile = tiles.find(t => t.id === id);
       const prompt = tile && effectivePrompt(tile);
       if (!tile || !prompt.trim() || !mainText.trim()) continue;
-      const { userText, start: emphStart, end: emphEnd } = computeEmphasis(mainText, snapCaret, detectScope(prompt));
+      const { userText, start: emphStart, end: emphEnd } = computeEmphasis(mainText, snapCaret, snapSelEnd);
       if (userText === lastUserText.get(id)) continue;
       lastUserText.set(id, userText);
       processingId = id;
@@ -470,13 +473,6 @@ function renderOutput(out, response, original, start, end) {
 
 // --- Caret-based emphasis ---
 
-function detectScope(prompt) {
-  if (/\bparagraph\b/i.test(prompt)) return 'paragraph';
-  if (/\bsentence\b/i.test(prompt)) return 'sentence';
-  if (/\bword\b/i.test(prompt)) return 'word';
-  return 'text';
-}
-
 function getWordBounds(text, pos) {
   let start = pos, end = pos;
   while (start > 0 && !/\s/.test(text[start - 1])) start--;
@@ -513,13 +509,12 @@ function getParagraphBounds(text, pos) {
   return { start, end };
 }
 
-function computeEmphasis(text, pos, scope) {
+function computeEmphasis(text, pos, selEnd) {
   const full = { userText: text, start: 0, end: text.length };
-  if (scope === 'text' || !text.trim()) return full;
-  let bounds;
-  if (scope === 'word') bounds = getWordBounds(text, pos);
-  else if (scope === 'sentence') bounds = getSentenceBounds(text, pos);
-  else if (scope === 'paragraph') bounds = getParagraphBounds(text, pos);
+  if (!text.trim()) return full;
+  const bounds = selEnd > pos
+    ? { start: pos, end: selEnd }
+    : getParagraphBounds(text, pos);
   if (!bounds) return full;
   let { start, end } = bounds;
   while (start < end && /\s/.test(text[start])) start++;
@@ -547,6 +542,7 @@ const mainInput = document.getElementById('main-input');
 mainInput.oninput = (e) => {
   mainText = e.target.value;
   caretPos = mainInput.selectionStart;
+  selectionEnd = mainInput.selectionEnd;
   clearTimeout(mainTimer);
   if (!mainText.trim()) {
     resetAndRun([]);
@@ -558,16 +554,14 @@ mainInput.oninput = (e) => {
 
 function scheduleCaretRun() {
   caretPos = mainInput.selectionStart;
+  selectionEnd = mainInput.selectionEnd;
   if (!mainText.trim()) return;
   clearTimeout(mainTimer);
   mainTimer = setTimeout(() => resetAndRun(tiles.map(t => t.id)), DEBOUNCE);
 }
 
-mainInput.addEventListener('click', scheduleCaretRun);
-mainInput.addEventListener('keyup', (e) => {
-  if (e.key.startsWith('Arrow') || ['Home', 'End', 'PageUp', 'PageDown'].includes(e.key)) {
-    scheduleCaretRun();
-  }
+document.addEventListener('selectionchange', () => {
+  if (document.activeElement === mainInput) scheduleCaretRun();
 });
 
 addBtn.onclick = addTile;

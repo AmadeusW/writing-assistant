@@ -152,13 +152,26 @@ body {
 /* Output tile header */
 .tile-bar {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
-  gap: 2px;
+  gap: 4px;
   padding: 3px 5px;
   background: #f8f8f8;
   border-bottom: 1px solid #e8e8e8;
   flex-shrink: 0;
   transition: border-bottom-color 0.2s;
+}
+
+.prompt-select {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  font-family: inherit;
+  color: #555;
+  cursor: pointer;
+  outline: none;
+  padding: 2px 4px;
 }
 
 .output-tile.streaming .tile-bar {

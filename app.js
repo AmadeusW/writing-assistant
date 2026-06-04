@@ -1,12 +1,15 @@
 'use strict';
 
-const DEFAULT_PROMPT1 = 'You are a writing coach. Your task is to rewrite the following text to prioritize simplicity, clarity and brevity. Your reply MUST contain ONLY the rewritten text, nothing else.';
-const DEFAULT_PROMPT2 = 'Rewrite the selected sentence for professionalism, conciseness and focus on impact. Respond only with the rewritten sentence.';
-const DEFAULT_PROMPT3 = 'Within the following text, find the selected word. Using your knowledge of words and thesaurus, respond with EXACTLY 3 words that might be suitable replacements of this exact selected word.';
 const DEBOUNCE = 400;
 const STORE = 'wa';
 const CFG_STORE = 'wa-cfg';
 const SAVED_CFGS_STORE = 'wa-saved-cfgs';
+
+const DEFAULT_PROMPTS = [
+  { "Concise": "Rewrite the selected text for professionalism, conciseness and focus on impact. Respond only with the rewritten text."},
+  { "Stern": "Rewrite the selected text for firm committment for results. Be stern and brief, yet curteous. Respond only with the rewritten text."},
+  { "Nice": "Rewrite the selected text for friendly rapport. Be brief, yet welcoming. Respond only with the rewritten text."}
+]
 
 // --- Config ---
 
@@ -130,6 +133,7 @@ function load() {
     if (d?.tiles?.length) {
       tiles = d.tiles.map(t => ({
         id: t.id,
+        promptKey: t.promptKey || (t.prompt ? 'custom' : Object.keys(DEFAULT_PROMPTS[0])[0]),
         prompt: t.prompt || '',
         outputRatio: typeof t.outputRatio === 'number' ? t.outputRatio : 0.75
       }));
@@ -138,15 +142,19 @@ function load() {
     }
   } catch {}
   tiles = [
-    { id: nextId++, prompt: DEFAULT_PROMPT1, outputRatio: 0.75 },
-    { id: nextId++, prompt: DEFAULT_PROMPT2, outputRatio: 0.75 },
-    { id: nextId++, prompt: DEFAULT_PROMPT3, outputRatio: 0.75 }
+    { id: nextId++, promptKey: Object.keys(DEFAULT_PROMPTS[0])[0], prompt: '', outputRatio: 0.75 }
   ];
   persist();
 }
 
 function persist() {
   localStorage.setItem(STORE, JSON.stringify({ tiles, nextId }));
+}
+
+function effectivePrompt(tile) {
+  if (tile.promptKey === 'custom') return tile.prompt;
+  const preset = DEFAULT_PROMPTS.find(p => Object.keys(p)[0] === tile.promptKey);
+  return preset ? Object.values(preset)[0] : '';
 }
 
 // --- Layout ---
@@ -173,8 +181,15 @@ function buildTile(tile) {
   const el = document.createElement('div');
   el.className = 'tile output-tile';
   el.dataset.id = tile.id;
+
+  const presetOptions = DEFAULT_PROMPTS.map(p => {
+    const key = Object.keys(p)[0];
+    return `<option value="${key}">${key}</option>`;
+  }).join('');
+
   el.innerHTML = `
     <div class="tile-bar">
+      <select class="prompt-select">${presetOptions}<option value="custom">Custom…</option></select>
       <button class="btn-copy" title="Copy output">⎘</button>
       <button class="btn-del" title="Remove tile">✕</button>
     </div>
@@ -184,16 +199,37 @@ function buildTile(tile) {
       <textarea class="tile-prompt" placeholder="System prompt…" spellcheck="false"></textarea>
     </div>`;
 
-  el.querySelector('.tile-prompt').value = tile.prompt;
+  const select = el.querySelector('.prompt-select');
+  const promptTA = el.querySelector('.tile-prompt');
+  const splitter = el.querySelector('.tile-splitter');
+
+  select.value = tile.promptKey || Object.keys(DEFAULT_PROMPTS[0])[0];
+  promptTA.value = tile.prompt;
+
+  function applyPromptVisibility() {
+    const isCustom = select.value === 'custom';
+    promptTA.style.display = isCustom ? '' : 'none';
+    splitter.style.display = isCustom ? '' : 'none';
+  }
+  applyPromptVisibility();
+
   applyTileSplit(tile.id, tile.outputRatio || 0.75);
   attachSplitterHandlers(el, tile);
+
+  select.onchange = () => {
+    tile.promptKey = select.value;
+    persist();
+    applyPromptVisibility();
+    lastUserText.delete(tile.id);
+    enqueue(tile.id);
+  };
 
   el.querySelector('.btn-copy').onclick = () =>
     navigator.clipboard.writeText(el.querySelector('.tile-output').textContent).catch(() => {});
 
   el.querySelector('.btn-del').onclick = () => delTile(tile.id);
 
-  el.querySelector('.tile-prompt').oninput = (e) => {
+  promptTA.oninput = (e) => {
     tile.prompt = e.target.value;
     persist();
     clearTimeout(tileTimers.get(tile.id));
@@ -209,7 +245,7 @@ function buildTile(tile) {
 
 function addTile() {
   if (tiles.length >= 8) return;
-  const tile = { id: nextId++, prompt: '', outputRatio: 0.75 };
+  const tile = { id: nextId++, promptKey: Object.keys(DEFAULT_PROMPTS[0])[0], prompt: '', outputRatio: 0.75 };
   tiles.push(tile);
   persist();
   const el = buildTile(tile);
@@ -326,8 +362,9 @@ async function runLoop(v) {
     queue = [];
     await Promise.all(ids.map(async id => {
       const tile = tiles.find(t => t.id === id);
-      if (!tile || !tile.prompt.trim() || !mainText.trim()) return;
-      const { userText, start: emphStart, end: emphEnd } = computeEmphasis(mainText, snapCaret, detectScope(tile.prompt));
+      const prompt = tile && effectivePrompt(tile);
+      if (!tile || !prompt.trim() || !mainText.trim()) return;
+      const { userText, start: emphStart, end: emphEnd } = computeEmphasis(mainText, snapCaret, detectScope(prompt));
       if (userText === lastUserText.get(id)) return;
       lastUserText.set(id, userText);
       const ac = new AbortController();
@@ -336,7 +373,7 @@ async function runLoop(v) {
       const el = tileEl(id);
       if (el) el.classList.add('streaming');
       try {
-        await doStream(tile.prompt, userText, out, ac.signal, mainText, emphStart, emphEnd);
+        await doStream(prompt, userText, out, ac.signal, mainText, emphStart, emphEnd);
       } catch (e) {
         if (e.name !== 'AbortError' && out && v === loopVer) out.textContent = `[Error: ${e.message}]`;
       } finally {
@@ -349,8 +386,9 @@ async function runLoop(v) {
     while (queue.length > 0 && v === loopVer) {
       const id = queue.shift();
       const tile = tiles.find(t => t.id === id);
-      if (!tile || !tile.prompt.trim() || !mainText.trim()) continue;
-      const { userText, start: emphStart, end: emphEnd } = computeEmphasis(mainText, snapCaret, detectScope(tile.prompt));
+      const prompt = tile && effectivePrompt(tile);
+      if (!tile || !prompt.trim() || !mainText.trim()) continue;
+      const { userText, start: emphStart, end: emphEnd } = computeEmphasis(mainText, snapCaret, detectScope(prompt));
       if (userText === lastUserText.get(id)) continue;
       lastUserText.set(id, userText);
       processingId = id;
@@ -359,7 +397,7 @@ async function runLoop(v) {
       const el = tileEl(id);
       if (el) el.classList.add('streaming');
       try {
-        await doStream(tile.prompt, userText, out, currentAbort.signal, mainText, emphStart, emphEnd);
+        await doStream(prompt, userText, out, currentAbort.signal, mainText, emphStart, emphEnd);
       } catch (e) {
         if (e.name === 'AbortError') {
           if (el) el.classList.remove('streaming');

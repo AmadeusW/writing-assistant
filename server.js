@@ -100,6 +100,7 @@ function handleProxy(req, res) {
 
     console.log('[proxy] forwarding to', `${parsed.protocol}//${parsed.hostname}:${opts.port}${opts.path}`,
       '| body', body.length, 'bytes', '| auth:', !!apiKey);
+    console.log('[proxy] request body:', body.toString('utf8'));
 
     const transport = isHttps ? https : http;
     const upstream  = transport.request(opts, upRes => {

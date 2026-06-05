@@ -263,9 +263,10 @@ function buildTile(tile) {
 
   el.innerHTML = `
     <div class="tile-bar">
+      <button class="btn-accept" title="Apply rewrite to text">↵</button>
+      <button class="btn-copy" title="Copy this text">⎘</button>
       <select class="prompt-select">${presetOptions}<option value="custom">Custom…</option></select>
       <button class="btn-edit" title="Edit prompt">✎</button>
-      <button class="btn-copy" title="Copy this text">⎘</button>
       <button class="btn-del" title="Remove tile">✕</button>
     </div>
     <div class="prompt-editor" hidden>
@@ -395,6 +396,29 @@ function buildTile(tile) {
     const text = copyAll ? out.textContent : rewrite.textContent;
     navigator.clipboard.writeText(text).catch(() => {});
     copyBtn.dataset.copiedRewrite = rewrite && !copyAll ? '1' : '';
+  };
+
+  el.querySelector('.btn-accept').onclick = () => {
+    const out = el.querySelector('.tile-output');
+    const rewrite = out.querySelector('.rewrite');
+    let newText, newCaret;
+    if (rewrite) {
+      const start = parseInt(out.dataset.start, 10);
+      const end = parseInt(out.dataset.end, 10);
+      const rewriteText = rewrite.textContent;
+      newText = mainText.slice(0, start) + rewriteText + mainText.slice(end);
+      newCaret = start + rewriteText.length;
+    } else {
+      newText = out.textContent;
+      newCaret = newText.length;
+    }
+    mainInput.value = newText;
+    mainText = newText;
+    mainInput.setSelectionRange(newCaret, newCaret);
+    caretPos = newCaret;
+    selectionEnd = newCaret;
+    clearTimeout(mainTimer);
+    mainTimer = setTimeout(() => resetAndRun(tiles.map(t => t.id)), DEBOUNCE);
   };
 
   el.querySelector('.btn-del').onclick = () => delTile(tile.id);
@@ -623,7 +647,11 @@ function renderOutput(out, response, original, start, end) {
   const hasRewrite = !(start === 0 && end === original.length);
   if (!hasRewrite) {
     out.textContent = response;
+    delete out.dataset.start;
+    delete out.dataset.end;
   } else {
+    out.dataset.start = start;
+    out.dataset.end = end;
     const append = (cls, txt) => {
       const s = document.createElement('span');
       s.className = cls;
@@ -634,7 +662,7 @@ function renderOutput(out, response, original, start, end) {
     append('rewrite', response);
     if (end < original.length) append('ctx', original.slice(end));
   }
-  // Reset copy state and update the tooltip to match the new content.
+  // Reset copy/accept state and update tooltips to match the new content.
   const tile = out.closest('.tile');
   const copyBtn = tile && tile.querySelector('.btn-copy');
   if (copyBtn) {
@@ -642,6 +670,12 @@ function renderOutput(out, response, original, start, end) {
     copyBtn.title = hasRewrite
       ? 'Copy edited selection, click twice to copy entire text'
       : 'Copy this text';
+  }
+  const acceptBtn = tile && tile.querySelector('.btn-accept');
+  if (acceptBtn) {
+    acceptBtn.title = hasRewrite
+      ? 'Apply rewrite to selected text'
+      : 'Apply output to text';
   }
 }
 

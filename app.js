@@ -208,7 +208,7 @@ function buildTile(tile) {
   el.innerHTML = `
     <div class="tile-bar">
       <select class="prompt-select">${presetOptions}<option value="custom">Custom…</option></select>
-      <button class="btn-copy" title="Copy output">⎘</button>
+      <button class="btn-copy" title="Copy this text">⎘</button>
       <button class="btn-del" title="Remove tile">✕</button>
     </div>
     <div class="tile-body">
@@ -242,8 +242,16 @@ function buildTile(tile) {
     enqueue(tile.id);
   };
 
-  el.querySelector('.btn-copy').onclick = () =>
-    navigator.clipboard.writeText(el.querySelector('.tile-output').textContent).catch(() => {});
+  const copyBtn = el.querySelector('.btn-copy');
+  copyBtn.onclick = () => {
+    const out = el.querySelector('.tile-output');
+    const rewrite = out.querySelector('.rewrite');
+    // With a rewrite span: first click copies just the rewrite, second copies all.
+    const copyAll = !rewrite || copyBtn.dataset.copiedRewrite === '1';
+    const text = copyAll ? out.textContent : rewrite.textContent;
+    navigator.clipboard.writeText(text).catch(() => {});
+    copyBtn.dataset.copiedRewrite = rewrite && !copyAll ? '1' : '';
+  };
 
   el.querySelector('.btn-del').onclick = () => delTile(tile.id);
 
@@ -473,19 +481,29 @@ async function doStream(sys, user, out, signal, original, emphStart, emphEnd) {
 
 function renderOutput(out, response, original, start, end) {
   while (out.firstChild) out.removeChild(out.firstChild);
-  if (start === 0 && end === original.length) {
+  const hasRewrite = !(start === 0 && end === original.length);
+  if (!hasRewrite) {
     out.textContent = response;
-    return;
+  } else {
+    const append = (cls, txt) => {
+      const s = document.createElement('span');
+      s.className = cls;
+      s.textContent = txt;
+      out.appendChild(s);
+    };
+    if (start > 0) append('ctx', original.slice(0, start));
+    append('rewrite', response);
+    if (end < original.length) append('ctx', original.slice(end));
   }
-  const append = (cls, txt) => {
-    const s = document.createElement('span');
-    s.className = cls;
-    s.textContent = txt;
-    out.appendChild(s);
-  };
-  if (start > 0) append('ctx', original.slice(0, start));
-  append('rewrite', response);
-  if (end < original.length) append('ctx', original.slice(end));
+  // Reset copy state and update the tooltip to match the new content.
+  const tile = out.closest('.tile');
+  const copyBtn = tile && tile.querySelector('.btn-copy');
+  if (copyBtn) {
+    copyBtn.dataset.copiedRewrite = '';
+    copyBtn.title = hasRewrite
+      ? 'Copy edited selection, click twice to copy entire text'
+      : 'Copy this text';
+  }
 }
 
 // --- Caret-based emphasis ---

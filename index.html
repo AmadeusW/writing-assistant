@@ -9,14 +9,18 @@
 <body>
   <header id="toolbar">
     <span class="app-title">Writing Assistant</span>
-    <span><a href="https://github.com/AmadeusW/writing-assistant">see me on GitHub</a></span>
-    <label class="cfg-field"><span>URL</span><input id="cfg-url" type="url" spellcheck="false" placeholder="https://.../api/v1/chat/completions" /></label>
-    <label class="cfg-field"><span>Key</span><input id="cfg-key" type="password" spellcheck="false" placeholder="sk-…" /></label>
-    <label class="cfg-field"><span>Model</span><input id="cfg-model" type="text" spellcheck="false" placeholder="model name" /></label>
-    <label class="cfg-field"><input id="cfg-parallel" type="checkbox"> Parallel</label>
-    <select id="cfg-saved"><option value="" disabled selected>Saved configs…</option></select>
-    <button id="cfg-save">Save</button>
+    <button id="cfg-toggle" aria-expanded="false" aria-controls="cfg-panel">Configure</button>
     <button id="add-tile">+ Add tile</button>
+    <section id="cfg-panel" hidden>
+      <label class="cfg-field"><span>URL</span><input id="cfg-url" type="url" spellcheck="false" placeholder="https://.../api/v1/chat/completions" /></label>
+      <label class="cfg-field"><span>Key</span><input id="cfg-key" type="password" spellcheck="false" placeholder="sk-…" /></label>
+      <label class="cfg-field"><span>Model</span><input id="cfg-model" type="text" spellcheck="false" placeholder="model name" /></label>
+      <label class="cfg-field"><input id="cfg-parallel" type="checkbox"> Parallel</label>
+      <select id="cfg-saved"><option value="" disabled selected>Saved configs…</option></select>
+      <button id="cfg-save">Save</button>
+      <span class="cfg-spacer"></span>
+      <a href="https://github.com/AmadeusW/writing-assistant">see me on GitHub</a>
+    </section>
   </header>
   <main id="grid"></main>
   <script src="app.js"></script>

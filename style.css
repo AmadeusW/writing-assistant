@@ -4,8 +4,13 @@
   padding: 0;
 }
 
+html {
+  overflow: hidden;
+}
+
 body {
-  height: 100vh;
+  height: 100vh; /* fallback; JS pins this to visualViewport.height */
+  overflow: hidden;
   display: flex;
   flex-direction: column;
   font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
@@ -15,6 +20,7 @@ body {
 }
 
 #toolbar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -93,7 +99,8 @@ body {
   background: #e8e8e8;
 }
 
-#add-tile {
+#add-tile,
+#cfg-toggle {
   padding: 5px 14px;
   border: 1px solid #bbb;
   border-radius: 5px;
@@ -103,8 +110,40 @@ body {
   font-family: inherit;
 }
 
-#add-tile:hover:not(:disabled) {
+#add-tile:hover:not(:disabled),
+#cfg-toggle:hover {
   background: #e8e8e8;
+}
+
+#cfg-toggle[aria-expanded="true"] {
+  background: #e4eefc;
+  border-color: #4a9eff;
+  color: #1a5fb4;
+}
+
+/* Collapsible configuration panel — floats over content below the toolbar */
+#cfg-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 10px 14px;
+  background: #fff;
+  border-bottom: 1px solid #d0d0d0;
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.16);
+}
+
+#cfg-panel[hidden] {
+  display: none;
+}
+
+.cfg-spacer {
+  flex: 1;
 }
 
 #add-tile:disabled {
@@ -125,6 +164,20 @@ body {
 #grid[data-cols="1"] { grid-template-columns: 1fr; }
 #grid[data-cols="2"] { grid-template-columns: repeat(2, 1fr); }
 #grid[data-cols="3"] { grid-template-columns: repeat(3, 1fr); }
+
+/* Mobile portrait: stack output(s) above the main input, with each output
+   tile's bar at its bottom. grid-auto-rows:1fr already splits the available
+   (above-keyboard) height evenly between the rows. */
+#grid.mobile-portrait .main-tile { order: 1; }
+#grid.mobile-portrait .tile { min-height: 0; }
+#grid.mobile-portrait .output-tile .tile-bar {
+  order: 1;
+  border-bottom: none;
+  border-top: 1px solid #e8e8e8;
+}
+#grid.mobile-portrait .output-tile.streaming .tile-bar {
+  border-top-color: #4a9eff;
+}
 
 .tile {
   background: #fff;

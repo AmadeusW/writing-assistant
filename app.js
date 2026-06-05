@@ -171,15 +171,15 @@ function effectivePrompt(tile) {
 
 function layout() {
   const n = 1 + tiles.length;
+  const portrait = window.innerWidth / window.innerHeight < LAYOUT_RATIO;
   let cols;
   if (n === 2) {
-    const aspectRatio = window.innerWidth / window.innerHeight;
-    const threshold = LAYOUT_RATIO;
-    cols = aspectRatio >= threshold ? 2 : 1;
+    cols = portrait ? 1 : 2;
   } else {
     cols = n <= 3 ? n : n === 4 ? 2 : 3;
   }
   grid.dataset.cols = cols;
+  grid.classList.toggle('mobile-portrait', portrait);
   addBtn.disabled = tiles.length >= 8;
 }
 
@@ -548,7 +548,7 @@ load();
 
 const mainTile = document.createElement('div');
 mainTile.className = 'tile main-tile';
-mainTile.innerHTML = '<textarea id="main-input" placeholder="Start typing…" autofocus></textarea>';
+mainTile.innerHTML = '<textarea id="main-input" placeholder="Start typing…" autofocus autocomplete="off" autocorrect="on" autocapitalize="sentences" spellcheck="true"></textarea>';
 grid.appendChild(mainTile);
 
 tiles.forEach(t => grid.appendChild(buildTile(t)));
@@ -584,12 +584,36 @@ document.addEventListener('selectionchange', () => {
 addBtn.onclick = addTile;
 window.addEventListener('resize', layout);
 
+// Keep the whole UI sized to the area above the on-screen keyboard.
+// On iOS the keyboard shrinks visualViewport but not window.innerHeight, so
+// 100vh would hide content behind the keyboard. Pin the body to the visible
+// height instead; the flex layout then splits the remaining space evenly.
+const vv = window.visualViewport;
+function applyViewportHeight() {
+  const h = vv ? vv.height : window.innerHeight;
+  document.body.style.height = `${h}px`;
+}
+if (vv) {
+  vv.addEventListener('resize', applyViewportHeight);
+  vv.addEventListener('scroll', applyViewportHeight);
+}
+window.addEventListener('resize', applyViewportHeight);
+applyViewportHeight();
+
 document.getElementById('cfg-url').oninput   = e => { cfg.url    = e.target.value.trim(); saveCfg(); markCfgDirty(); debouncedCfgRefresh(); };
 document.getElementById('cfg-key').oninput   = e => { cfg.apiKey = e.target.value.trim(); saveCfg(); markCfgDirty(); debouncedCfgRefresh(); };
 document.getElementById('cfg-model').oninput = e => { cfg.model  = e.target.value.trim(); saveCfg(); markCfgDirty(); debouncedCfgRefresh(); };
 
 document.getElementById('cfg-parallel').onchange = e => { cfg.parallel = e.target.checked; saveCfg(); };
 document.getElementById('cfg-save').onclick = saveCurrentCfg;
+
+const cfgToggle = document.getElementById('cfg-toggle');
+const cfgPanel = document.getElementById('cfg-panel');
+cfgToggle.onclick = () => {
+  const open = cfgPanel.hidden;
+  cfgPanel.hidden = !open;
+  cfgToggle.setAttribute('aria-expanded', String(open));
+};
 
 document.getElementById('cfg-saved').onchange = e => {
   const idx = parseInt(e.target.value, 10);

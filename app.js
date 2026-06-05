@@ -13,6 +13,8 @@ const DEFAULT_PROMPTS = [
   { "Nice": "Rewrite the selected text for friendly rapport. Be brief, yet welcoming. Respond only with the rewritten text."}
 ]
 
+const THESAURUS_PROMPT = "Within the following text, find the selected phrase. Using your knowledge of words and thesaurus, respond with EXACTLY 3 words that might be suitable replacements of this exact selected word."
+
 // --- Config ---
 
 const LAYOUT_RATIO = 1.1;
@@ -116,6 +118,12 @@ const lastUserText = new Map(); // tile id → last userText sent
 let mainTimer = null;
 let cfgTimer = null;
 const tileTimers = new Map();
+
+// --- Thesaurus state ---
+let thesaurusPhrase = '';
+let thesaurusAbort = null;
+let userJustTyped = false;
+let typingTimer = null;
 
 function debouncedCfgRefresh() {
   clearTimeout(cfgTimer);
@@ -559,6 +567,104 @@ function computeEmphasis(text, pos, selEnd) {
   return { userText, start, end };
 }
 
+// --- Thesaurus ---
+
+function isThesaurusSelection() {
+  if (selectionEnd <= caretPos) return false;
+  const words = mainText.slice(caretPos, selectionEnd).trim().split(/\s+/).filter(Boolean);
+  return words.length >= 1 && words.length <= 2;
+}
+
+function computeThesaurusPhrase() {
+  if (!mainText.trim()) return null;
+  if (selectionEnd > caretPos) {
+    const phrase = mainText.slice(caretPos, selectionEnd).trim();
+    const words = phrase.split(/\s+/).filter(Boolean);
+    if (words.length >= 1 && words.length <= 2) return { phrase, start: caretPos, end: selectionEnd };
+    return null;
+  }
+  if (userJustTyped || caretPos >= mainText.length) return null;
+  const { start, end } = getWordBounds(mainText, caretPos);
+  if (start >= end) return null;
+  return { phrase: mainText.slice(start, end), start, end };
+}
+
+function setThesaurusBars(words, info) {
+  document.querySelectorAll('.thesaurus-bar').forEach(bar => {
+    if (!words.length) { bar.hidden = true; bar.innerHTML = ''; return; }
+    bar.hidden = false;
+    bar.innerHTML = '';
+    words.forEach(w => {
+      const btn = document.createElement('button');
+      btn.className = 'thesaurus-word';
+      btn.textContent = w;
+      btn.onclick = () => replacePhrase(info.start, info.end, w);
+      bar.appendChild(btn);
+    });
+  });
+}
+
+function replacePhrase(start, end, word) {
+  const newText = mainText.slice(0, start) + word + mainText.slice(end);
+  mainInput.value = newText;
+  mainText = newText;
+  const newCaret = start + word.length;
+  mainInput.setSelectionRange(newCaret, newCaret);
+  caretPos = newCaret;
+  selectionEnd = newCaret;
+  userJustTyped = true;
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(() => { userJustTyped = false; }, DEBOUNCE);
+  thesaurusPhrase = '';
+  setThesaurusBars([]);
+  clearTimeout(mainTimer);
+  mainTimer = setTimeout(() => resetAndRun(tiles.map(t => t.id)), DEBOUNCE);
+}
+
+async function doThesaurus(userText, signal, info) {
+  try {
+    const r = await fetch('/proxy', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-target-url': cfg.url,
+        'x-api-key': cfg.apiKey,
+      },
+      body: JSON.stringify({
+        model: cfg.model || '',
+        stream: false,
+        messages: [
+          { role: 'system', content: THESAURUS_PROMPT },
+          { role: 'user', content: userText },
+        ],
+      }),
+      signal,
+    });
+    if (!r.ok) return;
+    const data = JSON.parse(await r.text());
+    const text = data?.choices?.[0]?.message?.content ?? '';
+    const words = text.split(/[\s,.\n\r;:]+/)
+      .map(w => w.replace(/[^a-zA-Z'-]/g, ''))
+      .filter(w => w.length > 1)
+      .slice(0, 3);
+    setThesaurusBars(words, info);
+  } catch (e) {
+    if (e.name !== 'AbortError') console.warn('[thesaurus]', e.message);
+  }
+}
+
+function maybeUpdateThesaurus() {
+  const info = computeThesaurusPhrase();
+  const phrase = info ? info.phrase : '';
+  if (phrase === thesaurusPhrase) return;
+  thesaurusPhrase = phrase;
+  if (thesaurusAbort) { thesaurusAbort.abort(); thesaurusAbort = null; }
+  if (!phrase) { setThesaurusBars([]); return; }
+  const userText = mainText.slice(0, info.start) + ' [SELECTED] ' + mainText.slice(info.start, info.end) + ' [/SELECTED] ' + mainText.slice(info.end);
+  thesaurusAbort = new AbortController();
+  doThesaurus(userText, thesaurusAbort.signal, info);
+}
+
 // --- Init ---
 
 loadCfg();
@@ -566,7 +672,7 @@ load();
 
 const mainTile = document.createElement('div');
 mainTile.className = 'tile main-tile';
-mainTile.innerHTML = '<textarea id="main-input" placeholder="Start typing…" autofocus autocomplete="off" autocorrect="on" autocapitalize="sentences" spellcheck="true"></textarea>';
+mainTile.innerHTML = '<div class="thesaurus-bar" hidden></div><textarea id="main-input" placeholder="Start typing…" autofocus autocomplete="off" autocorrect="on" autocapitalize="sentences" spellcheck="true"></textarea>';
 grid.appendChild(mainTile);
 
 tiles.forEach(t => grid.appendChild(buildTile(t)));
@@ -578,10 +684,16 @@ mainInput.oninput = (e) => {
   mainText = e.target.value;
   caretPos = mainInput.selectionStart;
   selectionEnd = mainInput.selectionEnd;
+  userJustTyped = true;
+  clearTimeout(typingTimer);
+  typingTimer = setTimeout(() => { userJustTyped = false; maybeUpdateThesaurus(); }, DEBOUNCE);
   clearTimeout(mainTimer);
   if (!mainText.trim()) {
     resetAndRun([]);
     tiles.forEach(t => { const el = outputEl(t.id); if (el) el.textContent = ''; });
+    thesaurusPhrase = '';
+    if (thesaurusAbort) { thesaurusAbort.abort(); thesaurusAbort = null; }
+    setThesaurusBars([]);
     return;
   }
   mainTimer = setTimeout(() => resetAndRun(tiles.map(t => t.id)), DEBOUNCE);
@@ -591,7 +703,9 @@ function scheduleCaretRun() {
   caretPos = mainInput.selectionStart;
   selectionEnd = mainInput.selectionEnd;
   if (!mainText.trim()) return;
+  maybeUpdateThesaurus();
   clearTimeout(mainTimer);
+  if (isThesaurusSelection()) return;
   mainTimer = setTimeout(() => resetAndRun(tiles.map(t => t.id)), DEBOUNCE);
 }
 

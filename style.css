@@ -175,6 +175,7 @@ body {
   border-bottom: none;
   border-top: 1px solid #e8e8e8;
 }
+
 #grid.mobile-portrait .output-tile.streaming .tile-bar {
   border-top-color: #4a9eff;
 }
@@ -246,6 +247,39 @@ body {
 .tile-bar button:hover {
   background: #e4e4e4;
   color: #222;
+}
+
+/* Thesaurus bar */
+.thesaurus-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: #f0f6ff;
+  border-bottom: 1px solid #cce0ff;
+  flex-shrink: 0;
+  min-height: 26px;
+}
+
+.thesaurus-bar[hidden] {
+  display: none;
+}
+
+.thesaurus-word {
+  border: 1px solid #aac8f8;
+  background: #e8f2ff;
+  border-radius: 3px;
+  padding: 1px 7px;
+  cursor: pointer;
+  font-size: 12px;
+  font-family: inherit;
+  color: #2060c0;
+  line-height: 1.4;
+}
+
+.thesaurus-word:hover {
+  background: #cce0ff;
+  border-color: #4a9eff;
 }
 
 /* Output tile content area */

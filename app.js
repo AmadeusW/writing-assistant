@@ -15,10 +15,12 @@ const DEFAULT_PROMPTS = [
 
 // --- Config ---
 
-let cfg = { 
-  url: 'https://openrouter.ai/api/v1/chat/completions', 
-  apiKey: '', 
-  model: 'google/gemini-3-flash-preview', 
+const LAYOUT_RATIO = 1.1;
+
+let cfg = {
+  url: 'https://openrouter.ai/api/v1/chat/completions',
+  apiKey: '',
+  model: 'google/gemini-3-flash-preview',
   parallel: true };
 let savedCfgs = []; // [{url, apiKey, model, label}]
 
@@ -169,7 +171,15 @@ function effectivePrompt(tile) {
 
 function layout() {
   const n = 1 + tiles.length;
-  grid.dataset.cols = n <= 3 ? n : n === 4 ? 2 : 3;
+  let cols;
+  if (n === 2) {
+    const aspectRatio = window.innerWidth / window.innerHeight;
+    const threshold = LAYOUT_RATIO;
+    cols = aspectRatio >= threshold ? 2 : 1;
+  } else {
+    cols = n <= 3 ? n : n === 4 ? 2 : 3;
+  }
+  grid.dataset.cols = cols;
   addBtn.disabled = tiles.length >= 8;
 }
 
@@ -572,6 +582,7 @@ document.addEventListener('selectionchange', () => {
 });
 
 addBtn.onclick = addTile;
+window.addEventListener('resize', layout);
 
 document.getElementById('cfg-url').oninput   = e => { cfg.url    = e.target.value.trim(); saveCfg(); markCfgDirty(); debouncedCfgRefresh(); };
 document.getElementById('cfg-key').oninput   = e => { cfg.apiKey = e.target.value.trim(); saveCfg(); markCfgDirty(); debouncedCfgRefresh(); };

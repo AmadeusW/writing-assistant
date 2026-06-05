@@ -9,6 +9,10 @@ html {
 }
 
 body {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
   height: 100vh; /* fallback; JS pins this to visualViewport.height */
   overflow: hidden;
   display: flex;

@@ -4,6 +4,10 @@
   padding: 0;
 }
 
+input, textarea, select {
+  font-size: 16px;
+}
+
 html {
   overflow: hidden;
 }
@@ -54,7 +58,6 @@ body {
   border: 1px solid #d0d0d0;
   border-radius: 4px;
   padding: 4px 7px;
-  font-size: 12px;
   font-family: inherit;
   background: #f9f9f9;
   color: #1a1a1a;
@@ -74,7 +77,6 @@ body {
   border: 1px solid #d0d0d0;
   border-radius: 4px;
   padding: 4px 6px;
-  font-size: 12px;
   font-family: inherit;
   background: #f9f9f9;
   color: #1a1a1a;
@@ -88,34 +90,17 @@ body {
   background: #fff;
 }
 
-#cfg-save {
-  padding: 4px 10px;
-  border: 1px solid #bbb;
-  border-radius: 4px;
-  background: #f5f5f5;
-  cursor: pointer;
-  font-size: 12px;
-  font-family: inherit;
-  white-space: nowrap;
-}
-
-#cfg-save:hover {
-  background: #e8e8e8;
-}
-
-#add-tile,
-#cfg-toggle {
+#toolbar button {
   padding: 5px 14px;
   border: 1px solid #bbb;
   border-radius: 5px;
   background: #f5f5f5;
   cursor: pointer;
-  font-size: 13px;
   font-family: inherit;
+  white-space: nowrap;
 }
 
-#add-tile:hover:not(:disabled),
-#cfg-toggle:hover {
+#toolbar button:hover:not(:disabled) {
   background: #e8e8e8;
 }
 
@@ -194,7 +179,6 @@ body {
   border: none;
   resize: none;
   font-family: inherit;
-  font-size: 15px;
   line-height: 1.65;
   outline: none;
   color: #1a1a1a;
@@ -204,7 +188,6 @@ body {
 .tile-bar {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
   gap: 4px;
   padding: 3px 5px;
   background: #f8f8f8;
@@ -214,15 +197,17 @@ body {
 }
 
 .prompt-select {
-  flex: 1;
   border: none;
   background: transparent;
-  font-size: 12px;
   font-family: inherit;
   color: #555;
   cursor: pointer;
   outline: none;
   padding: 2px 4px;
+}
+
+.btn-edit {
+  margin-left: auto;
 }
 
 .output-tile.streaming .tile-bar {
@@ -337,7 +322,6 @@ body {
   background: #fafafa;
   color: #666;
   font-family: inherit;
-  font-size: 13px;
   line-height: 1.55;
   overflow: auto;
 }
@@ -392,7 +376,6 @@ body.split-resizing {
   border: 1px solid #c0cce8;
   border-radius: 4px;
   padding: 3px 7px;
-  font-size: 12px;
   font-family: inherit;
   background: #fff;
   color: #1a1a1a;
@@ -430,7 +413,6 @@ body.split-resizing {
   background: #f8faff;
   color: #1a1a1a;
   font-family: inherit;
-  font-size: 13px;
   line-height: 1.55;
   overflow: auto;
   min-height: 0;
@@ -451,4 +433,5 @@ body.split-resizing {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
 }
+
 

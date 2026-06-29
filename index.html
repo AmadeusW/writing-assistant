@@ -12,9 +12,9 @@
     <button id="cfg-toggle" aria-expanded="false" aria-controls="cfg-panel">Configure</button>
     <button id="add-tile">+ Add tile</button>
     <section id="cfg-panel" hidden>
-      <label class="cfg-field"><span>URL</span><input id="cfg-url" type="url" spellcheck="false" placeholder="https://.../api/v1/chat/completions" /></label>
-      <label class="cfg-field"><span>Key</span><input id="cfg-key" type="password" spellcheck="false" placeholder="sk-…" /></label>
-      <label class="cfg-field"><span>Model</span><input id="cfg-model" type="text" spellcheck="false" placeholder="model name" /></label>
+      <label class="cfg-field"><span>URL</span><input id="cfg-url" type="url" spellcheck="false" autocomplete="off" placeholder="https://.../api/v1/chat/completions" /></label>
+      <label class="cfg-field"><span>Key</span><input id="cfg-key" type="password" spellcheck="false" autocomplete="off" placeholder="sk-…" /></label>
+      <label class="cfg-field"><span>Model</span><input id="cfg-model" type="text" spellcheck="false" autocomplete="off" placeholder="model name" /></label>
       <label class="cfg-field"><input id="cfg-parallel" type="checkbox"> Parallel</label>
       <select id="cfg-saved"><option value="" disabled selected>Saved configs…</option></select>
       <button id="cfg-save">Save</button>

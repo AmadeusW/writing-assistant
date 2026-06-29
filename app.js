@@ -273,15 +273,15 @@ function buildTile(tile) {
     <div class="prompt-editor" hidden>
       <div class="editor-bar">
         <span class="editor-title">Editing instructions <b class="editor-prompt-name"></b>. Save as</span>
-        <input class="editor-name-input" type="text" spellcheck="false" placeholder="Prompt name…">
+        <input class="editor-name-input" type="text" spellcheck="false" autocomplete="off" placeholder="Prompt name…">
         <button class="btn-save-prompt">Save</button>
       </div>
-      <textarea class="editor-textarea" placeholder="System prompt text…" spellcheck="false"></textarea>
+      <textarea class="editor-textarea" placeholder="System prompt text…" spellcheck="false" autocomplete="off"></textarea>
     </div>
     <div class="tile-body">
       <div class="tile-output"></div>
       <div class="tile-splitter" title="Drag to resize"></div>
-      <textarea class="tile-prompt" placeholder="System prompt…" spellcheck="false"></textarea>
+      <textarea class="tile-prompt" placeholder="System prompt…" spellcheck="false" autocomplete="off"></textarea>
     </div>`;
 
   const select = el.querySelector('.prompt-select');

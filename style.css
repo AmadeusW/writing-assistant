@@ -169,20 +169,13 @@ body {
 #grid[data-cols="2"] { grid-template-columns: repeat(2, 1fr); }
 #grid[data-cols="3"] { grid-template-columns: repeat(3, 1fr); }
 
-/* Mobile portrait: stack output(s) above the main input, with each output
-   tile's bar at its bottom. grid-auto-rows:1fr already splits the available
-   (above-keyboard) height evenly between the rows. */
-#grid.mobile-portrait .main-tile { order: 1; }
-#grid.mobile-portrait .tile { min-height: 0; }
-#grid.mobile-portrait .output-tile .tile-bar {
-  order: 1;
-  border-bottom: none;
-  border-top: 1px solid #e8e8e8;
+/* Mobile portrait: main input on top, output tiles below, bar at tile top. */
+#grid.mobile-portrait {
+  padding: 4px;
+  gap: 4px;
 }
-
-#grid.mobile-portrait .output-tile.streaming .tile-bar {
-  border-top-color: #4a9eff;
-}
+#grid.mobile-portrait .tile { min-height: 0; min-width: 0; }
+#grid.mobile-portrait .output-tile { order: 1; }
 
 .tile {
   background: #fff;

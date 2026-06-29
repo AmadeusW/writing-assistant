@@ -66,11 +66,12 @@ function rebuildAllSelects() {
 
 const LAYOUT_RATIO = 1.1;
 
-let cfg = {
+const DEFAULT_CFG = {
   url: 'https://openrouter.ai/api/v1/chat/completions',
   apiKey: '',
   model: 'google/gemini-3-flash-preview',
   parallel: true };
+let cfg = { ...DEFAULT_CFG };
 let savedCfgs = []; // [{url, apiKey, model, label}]
 
 function saveCfg() {
@@ -904,6 +905,14 @@ document.getElementById('cfg-model').oninput = e => { cfg.model  = e.target.valu
 
 document.getElementById('cfg-parallel').onchange = e => { cfg.parallel = e.target.checked; saveCfg(); };
 document.getElementById('cfg-save').onclick = saveCurrentCfg;
+document.getElementById('cfg-reset').onclick = () => {
+  localStorage.removeItem(CFG_STORE);
+  localStorage.removeItem(SAVED_CFGS_STORE);
+  savedCfgs = [];
+  cfg = { ...DEFAULT_CFG };
+  applyCfgToUI();
+  rebuildSavedSelect();
+};
 
 const cfgToggle = document.getElementById('cfg-toggle');
 const cfgPanel = document.getElementById('cfg-panel');
